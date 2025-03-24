@@ -49,7 +49,7 @@ def monitor_sign():
         
         params = {**result, 'phone': phone}
         
-        # 初始化监控配置
+        # 初始化监听配置
         configs['monitor'] = {
             'delay': 0,
             'presetAddress': []
@@ -106,9 +106,9 @@ def monitor_sign():
     name = get_account_info(params)
     colored_print(f"你好，{name}", "blue")
     
-    # 开始监控
-    colored_print(f"开始监控签到，延迟 {configs['monitor'].get('delay', 0)} 秒", "blue")
-    colored_print("按 Ctrl+C 退出监控", "blue")
+    # 开始监听
+    colored_print(f"开始监听签到，延迟 {configs['monitor'].get('delay', 0)} 秒", "blue")
+    colored_print("按 Ctrl+C 退出监听", "blue")
     
     try:
         while True:
@@ -236,7 +236,7 @@ def monitor_sign():
             
     
     except KeyboardInterrupt:
-        colored_print("监控已停止", "blue")
+        colored_print("监听已停止", "blue")
         
         # 保存最新配置
         phone = params.get('phone')
