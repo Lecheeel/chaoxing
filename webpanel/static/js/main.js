@@ -76,7 +76,17 @@ function updateUserTable() {
             <td>${user.id !== undefined ? user.id : '-'}</td>
             <td>${user.username || '未知用户'}</td>
             <td>${user.phone || '-'}</td>
-            <td><span class="badge ${isActive ? 'bg-success' : 'bg-secondary'}">${isActive ? '已激活' : '未激活'}</span></td>
+            <td>
+                <div class="form-check form-switch d-flex justify-content-center">
+                    <input class="form-check-input" type="checkbox" role="switch" 
+                        id="activeSwitch_${user.phone}" 
+                        ${isActive ? 'checked' : ''} 
+                        onchange="toggleUserActive('${user.phone}', this.checked)">
+                    <label class="form-check-label ms-2" for="activeSwitch_${user.phone}">
+                        <span class="badge ${isActive ? 'bg-success' : 'bg-secondary'}">${isActive ? '已激活' : '未激活'}</span>
+                    </label>
+                </div>
+            </td>
             <td>
                 <div class="btn-group btn-group-sm">
                     <button class="btn btn-primary" onclick="editUser('${user.phone}')">编辑</button>
@@ -557,6 +567,49 @@ function saveBatchLocation() {
             // 恢复按钮状态
             saveBtn.textContent = originalText;
             saveBtn.disabled = false;
+        });
+}
+
+// 切换用户激活状态
+function toggleUserActive(phone, isActive) {
+    axios.put(`/api/users/${phone}`, { active: isActive })
+        .then(response => {
+            if (response.data.status) {
+                // 更新本地用户数据
+                const user = users.find(u => u.phone === phone);
+                if (user) {
+                    user.active = isActive;
+                }
+                
+                // 更新表格行样式
+                const tr = document.querySelector(`#activeSwitch_${phone}`).closest('tr');
+                if (tr) {
+                    if (isActive) {
+                        tr.classList.remove('table-secondary');
+                    } else {
+                        tr.classList.add('table-secondary');
+                    }
+                }
+                
+                // 更新标签文本和样式
+                const badge = document.querySelector(`#activeSwitch_${phone}`).nextElementSibling.querySelector('.badge');
+                if (badge) {
+                    badge.textContent = isActive ? '已激活' : '未激活';
+                    badge.className = `badge ${isActive ? 'bg-success' : 'bg-secondary'}`;
+                }
+                
+                showSuccess(`用户 ${phone} ${isActive ? '已激活' : '已停用'}`);
+            } else {
+                showError(response.data.message);
+                // 回滚UI状态
+                document.querySelector(`#activeSwitch_${phone}`).checked = !isActive;
+            }
+        })
+        .catch(error => {
+            console.error('更新用户状态出错:', error);
+            showError('更新用户状态时发生错误: ' + (error.message || '未知错误'));
+            // 回滚UI状态
+            document.querySelector(`#activeSwitch_${phone}`).checked = !isActive;
         });
 }
 
