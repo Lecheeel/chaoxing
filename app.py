@@ -10,9 +10,6 @@ import atexit
 from logging.handlers import RotatingFileHandler
 import traceback
 
-# 设置环境变量，告诉Flask在生产环境中运行
-os.environ['FLASK_ENV'] = 'production'
-
 # 配置日志
 def setup_logging():
     # 确保日志目录存在
