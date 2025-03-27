@@ -231,92 +231,130 @@ function saveUser() {
 
 // 删除用户
 function deleteUser(phone) {
-    if (!confirm(`确认要删除手机号为 ${phone} 的用户吗？`)) {
-        return;
-    }
-    
-    axios.delete(`/api/users/${phone}`)
-        .then(response => {
-            if (response.data.status) {
-                // 刷新用户列表
-                loadUsers();
-                
-                showSuccess('用户删除成功');
-            } else {
-                showError(response.data.message);
-            }
-        })
-        .catch(error => {
-            console.error('删除用户出错:', error);
-            showError('删除用户时发生错误: ' + (error.message || '未知错误'));
-        });
+    Swal.fire({
+        title: '确认删除',
+        text: `确认要删除手机号为 ${phone} 的用户吗？`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#dc3545',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            axios.delete(`/api/users/${phone}`)
+                .then(response => {
+                    if (response.data.status) {
+                        // 刷新用户列表
+                        loadUsers();
+                        
+                        showSuccess('用户删除成功');
+                    } else {
+                        showError(response.data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('删除用户出错:', error);
+                    showError('删除用户时发生错误: ' + (error.message || '未知错误'));
+                });
+        }
+    });
 }
 
 // 对单个用户进行签到
 function signUser(phone) {
-    if (!confirm(`确认要为手机号为 ${phone} 的用户执行签到吗？`)) {
-        return;
-    }
-    
-    // 获取签到设置
-    const useRandomOffset = document.getElementById('useRandomOffset').checked;
-    
-    axios.post(`/api/sign/${phone}`, { location_random_offset: useRandomOffset })
-        .then(response => {
-            if (response.data.status) {
-                showSuccess(`用户 ${phone} 签到成功`);
-            } else {
-                showError(`用户 ${phone} 签到失败: ${response.data.message}`);
-            }
-        })
-        .catch(error => {
-            console.error('签到出错:', error);
-            showError('签到时发生错误: ' + (error.message || '未知错误'));
-        });
+    Swal.fire({
+        title: '确认签到',
+        text: `确认要为手机号为 ${phone} 的用户执行签到吗？`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#28a745',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: '确认签到',
+        cancelButtonText: '取消'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            // 获取签到设置
+            const useRandomOffset = document.getElementById('useRandomOffset').checked;
+            
+            // 显示加载状态
+            Swal.fire({
+                title: '签到中',
+                text: '正在执行签到操作，请稍候...',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+            
+            axios.post(`/api/sign/${phone}`, { location_random_offset: useRandomOffset })
+                .then(response => {
+                    if (response.data.status) {
+                        Swal.close();
+                        showSuccess(`用户 ${phone} 签到成功`);
+                    } else {
+                        showError(`用户 ${phone} 签到失败: ${response.data.message}`);
+                    }
+                })
+                .catch(error => {
+                    console.error('签到出错:', error);
+                    showError('签到时发生错误: ' + (error.message || '未知错误'));
+                });
+        }
+    });
 }
 
 // 批量签到
 function batchSign() {
-    if (!confirm('确认要为所有用户执行批量签到吗？')) {
-        return;
-    }
-    
-    // 获取签到设置
-    const excludeInactive = document.getElementById('excludeInactiveUsers').checked;
-    const useRandomOffset = document.getElementById('useRandomOffset').checked;
-    
-    // 显示加载状态
-    const batchSignBtn = document.getElementById('batchSignBtn');
-    const originalText = batchSignBtn.textContent;
-    batchSignBtn.textContent = '签到中...';
-    batchSignBtn.disabled = true;
-    
-    // 清空结果区域
-    const resultDiv = document.getElementById('batchSignResult');
-    resultDiv.innerHTML = '<div class="alert alert-info">正在执行批量签到，请稍候...</div>';
-    
-    // 签到请求
-    axios.post('/api/sign/all', {
-        exclude_inactive: excludeInactive,
-        location_random_offset: useRandomOffset
-    })
-        .then(response => {
-            if (response.data.status) {
-                // 显示签到结果
-                showBatchSignResults(response.data.results);
-            } else {
-                showError('批量签到失败: ' + response.data.message);
-            }
-        })
-        .catch(error => {
-            console.error('批量签到出错:', error);
-            showError('批量签到时发生错误: ' + (error.message || '未知错误'));
-        })
-        .finally(() => {
-            // 恢复按钮状态
-            batchSignBtn.textContent = originalText;
-            batchSignBtn.disabled = false;
-        });
+    Swal.fire({
+        title: '批量签到',
+        text: '确认要为所有用户执行批量签到吗？',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#28a745',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: '确认签到',
+        cancelButtonText: '取消'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            // 获取签到设置
+            const excludeInactive = document.getElementById('excludeInactiveUsers').checked;
+            const useRandomOffset = document.getElementById('useRandomOffset').checked;
+            
+            // 显示加载状态
+            const batchSignBtn = document.getElementById('batchSignBtn');
+            const originalText = batchSignBtn.textContent;
+            batchSignBtn.textContent = '签到中...';
+            batchSignBtn.disabled = true;
+            
+            // 清空结果区域
+            const resultDiv = document.getElementById('batchSignResult');
+            resultDiv.innerHTML = '<div class="alert alert-info">正在执行批量签到，请稍候...</div>';
+            
+            // 签到请求
+            axios.post('/api/sign/all', {
+                exclude_inactive: excludeInactive,
+                location_random_offset: useRandomOffset
+            })
+                .then(response => {
+                    if (response.data.status) {
+                        // 显示签到结果
+                        showBatchSignResults(response.data.results);
+                    } else {
+                        showError('批量签到失败: ' + response.data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('批量签到出错:', error);
+                    showError('批量签到时发生错误: ' + (error.message || '未知错误'));
+                })
+                .finally(() => {
+                    // 恢复按钮状态
+                    batchSignBtn.textContent = originalText;
+                    batchSignBtn.disabled = false;
+                });
+        }
+    });
 }
 
 // 显示批量签到结果
@@ -329,32 +367,67 @@ function showBatchSignResults(results) {
         return;
     }
     
-    // 添加标题
-    const header = document.createElement('h4');
-    header.textContent = '签到结果';
-    resultDiv.appendChild(header);
-    
     // 计算签到统计
     const total = results.length;
     const success = results.filter(r => r.status).length;
     const failed = total - success;
     
-    // 添加统计信息
-    const stats = document.createElement('div');
-    stats.className = 'alert alert-info mb-3';
-    stats.innerHTML = `总计: ${total}个用户, 成功: ${success}个, 失败: ${failed}个`;
-    resultDiv.appendChild(stats);
+    // 创建结果卡片
+    const card = document.createElement('div');
+    card.className = 'card';
     
-    // 添加详细结果
+    // 卡片头部
+    const cardHeader = document.createElement('div');
+    cardHeader.className = 'card-header d-flex justify-content-between align-items-center';
+    cardHeader.innerHTML = `
+        <h5 class="mb-0"><i class="fas fa-clipboard-check me-2"></i>签到结果</h5>
+        <div class="badge-group">
+            <span class="badge bg-primary">总计: ${total}</span>
+            <span class="badge bg-success">成功: ${success}</span>
+            <span class="badge bg-danger">失败: ${failed}</span>
+        </div>
+    `;
+    card.appendChild(cardHeader);
+    
+    // 卡片内容
+    const cardBody = document.createElement('div');
+    cardBody.className = 'card-body';
+    
+    // 创建表格
+    const table = document.createElement('table');
+    table.className = 'table table-striped table-hover mb-0';
+    table.innerHTML = `
+        <thead class="table-light">
+            <tr>
+                <th>用户</th>
+                <th>手机号</th>
+                <th>状态</th>
+                <th>消息</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    `;
+    
+    // 添加结果行
+    const tbody = table.querySelector('tbody');
     results.forEach(result => {
-        const item = document.createElement('div');
-        item.className = 'result-item ' + (result.status ? 'result-success' : 'result-error');
-        item.innerHTML = `
-            <strong>${result.name} (${result.phone})</strong>: 
-            ${result.status ? '成功' : '失败'} - ${result.message}
+        const tr = document.createElement('tr');
+        tr.className = result.status ? '' : 'table-danger';
+        tr.innerHTML = `
+            <td>${result.name}</td>
+            <td>${result.phone}</td>
+            <td><span class="badge ${result.status ? 'bg-success' : 'bg-danger'}">${result.status ? '成功' : '失败'}</span></td>
+            <td>${result.message}</td>
         `;
-        resultDiv.appendChild(item);
+        tbody.appendChild(tr);
     });
+    
+    cardBody.appendChild(table);
+    card.appendChild(cardBody);
+    resultDiv.appendChild(card);
+    
+    // 滚动到结果区域
+    resultDiv.scrollIntoView({ behavior: 'smooth' });
 }
 
 // 用户选择变更
@@ -465,12 +538,21 @@ function addLocationPreset() {
 
 // 删除位置预设
 function deletePreset(phone, index) {
-    if (!confirm('确认要删除这个位置预设吗？')) {
-        return;
-    }
-    
-    // TODO: 实现删除位置预设的API调用
-    showError('删除位置预设功能暂未实现');
+    Swal.fire({
+        title: '确认删除',
+        text: '确认要删除这个位置预设吗？',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#dc3545',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            // TODO: 实现删除位置预设的API调用
+            showError('删除位置预设功能暂未实现');
+        }
+    });
 }
 
 // 切换密码显示/隐藏
@@ -626,10 +708,26 @@ function hideLoading() {
 
 // 辅助函数：显示成功消息
 function showSuccess(message) {
-    alert(message);
+    // 使用Toastify显示轻量级成功提示
+    Toastify({
+        text: message,
+        duration: 3000,
+        gravity: "top",
+        position: "right",
+        style: {
+            background: "linear-gradient(to right, #00b09b, #96c93d)",
+        },
+        onClick: function(){} // 点击关闭
+    }).showToast();
 }
 
 // 辅助函数：显示错误消息
 function showError(message) {
-    alert('错误: ' + message);
+    // 使用SweetAlert2显示错误提示
+    Swal.fire({
+        icon: 'error',
+        title: '操作失败',
+        text: message,
+        confirmButtonColor: '#dc3545'
+    });
 } 
