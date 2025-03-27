@@ -3,12 +3,24 @@ let users = [];
 let currentSelectedUser = null;
 let userPresets = {};
 
+// 编辑定时任务
+let currentEditTaskId = null;
+
 // 使用jQuery而非原生JS来处理DOM加载完成事件
 $(document).ready(function() {
     console.log('DOM已通过jQuery加载完成');
     
-    // 初始化页面
+    // 加载用户数据
     loadUsers();
+    
+    // 加载位置预设
+    loadLocationPresets();
+    
+    // 加载定时任务列表
+    loadScheduleTasks();
+    
+    // 加载用户选项到选择框
+    loadUserOptions();
     
     // 绑定事件
     $('#addUserBtn').on('click', addUser);
@@ -29,6 +41,349 @@ $(document).ready(function() {
         $('.navbar-nav .nav-link').removeClass('active');
         $(this).addClass('active');
     });
+    
+    // 切换任务类型显示相应设置
+    $('#scheduleType').change(function() {
+        const type = $(this).val();
+        
+        // 隐藏所有设置区域
+        $('#timeSettings, #weekSettings, #intervalSettings').addClass('d-none');
+        
+        if (type === 'daily') {
+            $('#timeSettings').removeClass('d-none');
+        } else if (type === 'weekly') {
+            $('#timeSettings, #weekSettings').removeClass('d-none');
+        } else if (type === 'interval') {
+            $('#intervalSettings').removeClass('d-none');
+        }
+    });
+    
+    $('#editScheduleType').change(function() {
+        const type = $(this).val();
+        
+        // 隐藏所有设置区域
+        $('#editTimeSettings, #editWeekSettings, #editIntervalSettings').addClass('d-none');
+        
+        if (type === 'daily') {
+            $('#editTimeSettings').removeClass('d-none');
+        } else if (type === 'weekly') {
+            $('#editTimeSettings, #editWeekSettings').removeClass('d-none');
+        } else if (type === 'interval') {
+            $('#editIntervalSettings').removeClass('d-none');
+        }
+    });
+    
+    // 用户选择方式切换
+    $('#scheduleUserType').change(function() {
+        const type = $(this).val();
+        
+        if (type === 'phone') {
+            $('#userPhoneSelect').removeClass('d-none');
+            $('#userIndexInput').addClass('d-none');
+        } else {  // index
+            $('#userPhoneSelect').addClass('d-none');
+            $('#userIndexInput').removeClass('d-none');
+        }
+    });
+    
+    // 编辑模态框中的用户选择方式切换
+    $('#editScheduleUserType').change(function() {
+        const type = $(this).val();
+        
+        if (type === 'phone') {
+            $('#editUserPhoneSelect').removeClass('d-none');
+            $('#editUserIndexInput').addClass('d-none');
+        } else {  // index
+            $('#editUserPhoneSelect').addClass('d-none');
+            $('#editUserIndexInput').removeClass('d-none');
+        }
+    });
+    
+    // 位置选择切换
+    $('#scheduleLocation').change(function() {
+        const value = $(this).val();
+        
+        if (value === 'custom') {
+            $('#customLocationSettings').removeClass('d-none');
+        } else {
+            $('#customLocationSettings').addClass('d-none');
+        }
+    });
+    
+    $('#editScheduleLocation').change(function() {
+        const value = $(this).val();
+        
+        if (value === 'custom') {
+            $('#editCustomLocationSettings').removeClass('d-none');
+        } else {
+            $('#editCustomLocationSettings').addClass('d-none');
+        }
+    });
+    
+    // 保存定时任务
+    $('#saveScheduleBtn').click(function() {
+        // 收集表单数据
+        const formData = {
+            name: $('#scheduleName').val(),
+            type: $('#scheduleType').val(),
+            user_type: $('#scheduleUserType').val(),
+            active: true
+        };
+        
+        // 验证必填字段
+        if (!formData.name || !formData.type || !formData.user_type) {
+            showToast('请填写所有必填字段', 'error');
+            return;
+        }
+        
+        // 根据任务类型添加字段
+        if (formData.type === 'daily' || formData.type === 'weekly') {
+            formData.time = $('#scheduleTime').val();
+            
+            if (!formData.time) {
+                showToast('请选择执行时间', 'error');
+                return;
+            }
+            
+            if (formData.type === 'weekly') {
+                // 收集选中的星期
+                const days = [];
+                $('.weekday:checked').each(function() {
+                    days.push(parseInt($(this).val()));
+                });
+                
+                if (days.length === 0) {
+                    showToast('请选择至少一天', 'error');
+                    return;
+                }
+                
+                formData.days = days;
+            }
+        } else if (formData.type === 'interval') {
+            formData.interval = parseInt($('#scheduleInterval').val());
+            formData.unit = $('#scheduleUnit').val();
+            
+            if (!formData.interval) {
+                showToast('请输入有效的间隔值', 'error');
+                return;
+            }
+        }
+        
+        // 根据用户选择方式添加用户ID
+        if (formData.user_type === 'phone') {
+            // 获取选中的用户IDs
+            const selectedUserIds = getSelectedUserIds('.user-checkbox');
+            
+            if (selectedUserIds.length === 0) {
+                showToast('请至少选择一个用户', 'error');
+                return;
+            }
+            
+            formData.user_ids = selectedUserIds;
+        } else {
+            const userIndex = $('#scheduleUserIndex').val();
+            
+            if (!userIndex && userIndex !== '0') {
+                showToast('请输入有效的用户索引', 'error');
+                return;
+            }
+            
+            formData.user_ids = [userIndex];
+        }
+        
+        // 处理位置参数
+        const locationType = $('#scheduleLocation').val();
+        
+        if (locationType === 'custom') {
+            // 获取自定义位置参数
+            const address = $('#scheduleCustomAddress').val().trim();
+            const lon = $('#scheduleCustomLon').val().trim();
+            const lat = $('#scheduleCustomLat').val().trim();
+            
+            if (!address || !lon || !lat) {
+                showToast('请填写完整的自定义位置信息', 'error');
+                return;
+            }
+            
+            // 添加自定义位置参数
+            formData.location_address = address;
+            formData.location_lon = parseFloat(lon);
+            formData.location_lat = parseFloat(lat);
+        } else if (locationType) {
+            // 使用预设位置
+            formData.location_preset_item = locationType;
+        }
+        
+        formData.location_random_offset = $('#scheduleRandomOffset').is(':checked');
+        
+        // 发送请求
+        axios.post('/api/schedule', formData)
+            .then(function(response) {
+                if (response.data.status) {
+                    showToast('定时任务创建成功', 'success');
+                    $('#addScheduleModal').modal('hide');
+                    loadScheduleTasks();
+                } else {
+                    showToast('创建失败: ' + response.data.message, 'error');
+                }
+            })
+            .catch(function(error) {
+                console.error('创建定时任务失败:', error);
+                showToast('创建定时任务失败', 'error');
+            });
+    });
+    
+    // 打开编辑任务模态框
+    $(document).on('click', '.edit-schedule', function() {
+        const taskId = $(this).closest('tr').data('id');
+        
+        // 加载任务数据
+        editSchedule(taskId);
+    });
+    
+    // 更新定时任务
+    $('#updateScheduleBtn').click(function() {
+        if (!currentEditTaskId) {
+            showToast('任务ID无效', 'error');
+            return;
+        }
+        
+        // 收集表单数据
+        const formData = {
+            name: $('#editScheduleName').val(),
+            type: $('#editScheduleType').val(),
+            user_type: $('#editScheduleUserType').val(),
+            active: $('#editScheduleActive').is(':checked')
+        };
+        
+        // 验证必填字段
+        if (!formData.name || !formData.type || !formData.user_type) {
+            showToast('请填写所有必填字段', 'error');
+            return;
+        }
+        
+        // 根据任务类型添加字段
+        if (formData.type === 'daily' || formData.type === 'weekly') {
+            formData.time = $('#editScheduleTime').val();
+            
+            if (!formData.time) {
+                showToast('请选择执行时间', 'error');
+                return;
+            }
+            
+            if (formData.type === 'weekly') {
+                // 收集选中的星期
+                const days = [];
+                $('.editWeekday:checked').each(function() {
+                    days.push(parseInt($(this).val()));
+                });
+                
+                if (days.length === 0) {
+                    showToast('请选择至少一天', 'error');
+                    return;
+                }
+                
+                formData.days = days;
+            }
+        } else if (formData.type === 'interval') {
+            formData.interval = parseInt($('#editScheduleInterval').val());
+            formData.unit = $('#editScheduleUnit').val();
+            
+            if (!formData.interval) {
+                showToast('请输入有效的间隔值', 'error');
+                return;
+            }
+        }
+        
+        // 根据用户选择方式添加用户ID
+        if (formData.user_type === 'phone') {
+            // 获取选中的用户IDs
+            const selectedUserIds = getSelectedUserIds('.edit-user-checkbox');
+            
+            if (selectedUserIds.length === 0) {
+                showToast('请至少选择一个用户', 'error');
+                return;
+            }
+            
+            formData.user_ids = selectedUserIds;
+        } else {
+            const userIndex = $('#editScheduleUserIndex').val();
+            
+            if (!userIndex && userIndex !== '0') {
+                showToast('请输入有效的用户索引', 'error');
+                return;
+            }
+            
+            formData.user_ids = [userIndex];
+        }
+        
+        // 处理位置参数
+        const locationType = $('#editScheduleLocation').val();
+        
+        if (locationType === 'custom') {
+            // 获取自定义位置参数
+            const address = $('#editScheduleCustomAddress').val().trim();
+            const lon = $('#editScheduleCustomLon').val().trim();
+            const lat = $('#editScheduleCustomLat').val().trim();
+            
+            if (!address || !lon || !lat) {
+                showToast('请填写完整的自定义位置信息', 'error');
+                return;
+            }
+            
+            // 添加自定义位置参数
+            formData.location_address = address;
+            formData.location_lon = parseFloat(lon);
+            formData.location_lat = parseFloat(lat);
+            formData.location_preset_item = null;  // 清除预设项
+        } else if (locationType) {
+            // 使用预设位置
+            formData.location_preset_item = locationType;
+            // 清除自定义位置参数
+            formData.location_address = null;
+            formData.location_lon = null;
+            formData.location_lat = null;
+        } else {
+            // 使用默认位置，清除所有位置参数
+            formData.location_preset_item = null;
+            formData.location_address = null;
+            formData.location_lon = null;
+            formData.location_lat = null;
+        }
+        
+        formData.location_random_offset = $('#editScheduleRandomOffset').is(':checked');
+        
+        // 发送请求
+        axios.put(`/api/schedule/${currentEditTaskId}`, formData)
+            .then(function(response) {
+                if (response.data.status) {
+                    showToast('定时任务更新成功', 'success');
+                    $('#editScheduleModal').modal('hide');
+                    loadScheduleTasks();
+                } else {
+                    showToast('更新失败: ' + response.data.message, 'error');
+                }
+            })
+            .catch(function(error) {
+                console.error('更新定时任务失败:', error);
+                showToast('更新定时任务失败', 'error');
+            });
+    });
+    
+    // 立即执行任务
+    $(document).on('click', '.execute-schedule', function() {
+        const taskId = $(this).data('id');
+        executeSchedule(taskId);
+    });
+    
+    // 删除任务
+    $(document).on('click', '.delete-schedule', function() {
+        const taskId = $(this).data('id');
+        deleteSchedule(taskId);
+    });
+    
+    // 每30秒自动刷新任务列表
+    setInterval(loadScheduleTasks, 30000);
 });
 
 // 加载用户列表
@@ -398,7 +753,7 @@ function executeBatchSign() {
                 showError('批量签到失败: ' + response.data.message);
             }
         })
-        .catch(error => {
+        .catch(function(error) {
             console.error('批量签到出错:', error);
             hideLoading();
             showError('批量签到时发生错误: ' + (error.message || '未知错误'));
@@ -919,4 +1274,493 @@ function renderUserTable(users) {
         const phone = $(this).data('phone');
         signUser(phone);
     });
+}
+
+/**
+ * 显示浮动通知
+ * @param {string} message - 通知消息
+ * @param {string} type - 通知类型：success, error, warning, info
+ */
+function showToast(message, type = 'info') {
+    let backgroundColor = '#1a73e8'; // 默认蓝色
+    
+    switch (type) {
+        case 'success':
+            backgroundColor = '#28a745';
+            break;
+        case 'error':
+            backgroundColor = '#dc3545';
+            break;
+        case 'warning':
+            backgroundColor = '#ffc107';
+            break;
+    }
+    
+    Toastify({
+        text: message,
+        duration: 3000,
+        close: true,
+        gravity: "top",
+        position: "right",
+        backgroundColor: backgroundColor,
+        stopOnFocus: true,
+    }).showToast();
+}
+
+// 加载用户列表到选择框
+function loadUserOptions() {
+    axios.get('/api/users')
+        .then(function(response) {
+            if (response.data.status && response.data.users) {
+                const users = response.data.users;
+                
+                // 清空现有选项
+                $('#userCheckboxes').empty();
+                $('#editUserCheckboxes').empty();
+                
+                // 添加用户复选框
+                users.forEach(function(user) {
+                    const userPhone = user.phone;
+                    const userName = user.username || '未知用户';
+                    const isActive = user.active !== false;
+                    
+                    // 创建添加任务的复选框
+                    const userCheckbox = `
+                        <div class="form-check mb-2">
+                            <input class="form-check-input user-checkbox" type="checkbox" value="${userPhone}" 
+                                id="user_${userPhone}" ${isActive ? '' : 'disabled'}>
+                            <label class="form-check-label" for="user_${userPhone}">
+                                ${userName} (${userPhone}) ${isActive ? '' : '<span class="text-danger">[已禁用]</span>'}
+                            </label>
+                        </div>
+                    `;
+                    $('#userCheckboxes').append(userCheckbox);
+                    
+                    // 创建编辑任务的复选框
+                    const editUserCheckbox = `
+                        <div class="form-check mb-2">
+                            <input class="form-check-input edit-user-checkbox" type="checkbox" value="${userPhone}" 
+                                id="edit_user_${userPhone}" ${isActive ? '' : 'disabled'}>
+                            <label class="form-check-label" for="edit_user_${userPhone}">
+                                ${userName} (${userPhone}) ${isActive ? '' : '<span class="text-danger">[已禁用]</span>'}
+                            </label>
+                        </div>
+                    `;
+                    $('#editUserCheckboxes').append(editUserCheckbox);
+                });
+                
+                // 全选/取消全选功能
+                $('#selectAllUsers').on('change', function() {
+                    const isChecked = $(this).prop('checked');
+                    $('.user-checkbox:not([disabled])').prop('checked', isChecked);
+                });
+                
+                $('#editSelectAllUsers').on('change', function() {
+                    const isChecked = $(this).prop('checked');
+                    $('.edit-user-checkbox:not([disabled])').prop('checked', isChecked);
+                });
+                
+                // 当单个复选框更改时更新全选框状态
+                $(document).on('change', '.user-checkbox', function() {
+                    updateSelectAllCheckbox('#selectAllUsers', '.user-checkbox:not([disabled])');
+                });
+                
+                $(document).on('change', '.edit-user-checkbox', function() {
+                    updateSelectAllCheckbox('#editSelectAllUsers', '.edit-user-checkbox:not([disabled])');
+                });
+            }
+        })
+        .catch(function(error) {
+            console.error('获取用户列表失败:', error);
+            showToast('获取用户列表失败', 'error');
+        });
+}
+
+// 更新全选复选框状态
+function updateSelectAllCheckbox(selectAllId, checkboxSelector) {
+    const totalCheckboxes = $(checkboxSelector).length;
+    const checkedCheckboxes = $(checkboxSelector + ':checked').length;
+    
+    if (checkedCheckboxes === 0) {
+        $(selectAllId).prop('checked', false);
+        $(selectAllId).prop('indeterminate', false);
+    } else if (checkedCheckboxes === totalCheckboxes) {
+        $(selectAllId).prop('checked', true);
+        $(selectAllId).prop('indeterminate', false);
+    } else {
+        $(selectAllId).prop('indeterminate', true);
+    }
+}
+
+// 获取选中的用户ID
+function getSelectedUserIds(checkboxSelector) {
+    const selectedUserIds = [];
+    $(checkboxSelector + ':checked').each(function() {
+        selectedUserIds.push($(this).val());
+    });
+    return selectedUserIds;
+}
+
+// 加载定时任务列表
+function loadScheduleTasks() {
+    axios.get('/api/schedule')
+        .then(function(response) {
+            if (response.data.status) {
+                displayScheduleTasks(response.data.tasks);
+            } else {
+                showToast('获取定时任务失败: ' + response.data.message, 'error');
+            }
+        })
+        .catch(function(error) {
+            console.error('获取定时任务失败:', error);
+            showToast('获取定时任务失败', 'error');
+        });
+}
+
+// 显示定时任务列表
+function displayScheduleTasks(tasks) {
+    const tbody = $('#scheduleTable tbody');
+    tbody.empty();
+
+    if (!tasks || tasks.length === 0) {
+        tbody.append(`
+            <tr>
+                <td colspan="8" class="text-center">暂无定时任务</td>
+            </tr>
+        `);
+        return;
+    }
+
+    tasks.forEach(task => {
+        // 构建任务类型和执行时间显示
+        let typeDisplay = '';
+        let timeDisplay = '';
+        
+        switch (task.type) {
+            case 'daily':
+                typeDisplay = '<span class="badge bg-info">每日定时</span>';
+                timeDisplay = task.time || '未设置';
+                break;
+            case 'weekly':
+                typeDisplay = '<span class="badge bg-primary">每周定时</span>';
+                const dayNames = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+                const dayDisplay = (task.days || []).map(d => dayNames[d]).join(', ');
+                timeDisplay = `${task.time || '未设置'} (${dayDisplay})`;
+                break;
+            case 'interval':
+                typeDisplay = '<span class="badge bg-warning">间隔执行</span>';
+                const unitMap = {
+                    'seconds': '秒',
+                    'minutes': '分钟',
+                    'hours': '小时'
+                };
+                timeDisplay = `每 ${task.interval || 0} ${unitMap[task.unit] || '秒'}`;
+                break;
+            default:
+                typeDisplay = '<span class="badge bg-secondary">未知类型</span>';
+                timeDisplay = '未设置';
+        }
+        
+        // 构建用户信息显示
+        let userDisplay = '';
+        if (task.user_type === 'phone') {
+            if (task.user_ids && task.user_ids.length > 0) {
+                // 显示用户数量
+                userDisplay = `${task.user_ids.length} 个用户`;
+                
+                // 如果用户数量不多，则显示详细信息
+                if (task.user_ids.length <= 3) {
+                    userDisplay = task.user_ids.join(', ');
+                }
+            } else if (task.user_id) {
+                // 兼容旧数据格式
+                userDisplay = task.user_id;
+            } else {
+                userDisplay = '未设置';
+            }
+        } else { // index
+            if (task.user_ids && task.user_ids.length > 0) {
+                userDisplay = `索引 ${task.user_ids.join(', ')}`;
+            } else if (task.user_id !== undefined) {
+                userDisplay = `索引 ${task.user_id}`;
+            } else {
+                userDisplay = '未设置';
+            }
+        }
+        
+        // 构建最后执行结果显示
+        let lastRunDisplay = '';
+        if (task.last_run) {
+            const statusDisplay = task.last_run.status ? 
+                '<span class="badge bg-success">成功</span>' : 
+                '<span class="badge bg-danger">失败</span>';
+            
+            lastRunDisplay = `
+                <div>${task.last_run.time}</div>
+                ${statusDisplay}
+                <div class="small text-muted">${task.last_run.message || '无详情'}</div>
+            `;
+        } else {
+            lastRunDisplay = '<span class="text-muted">从未执行</span>';
+        }
+        
+        // 构建任务状态显示
+        const statusDisplay = task.active !== false ? 
+            '<span class="badge bg-success">激活</span>' : 
+            '<span class="badge bg-secondary">禁用</span>';
+        
+        // 添加到表格
+        const tr = $(`<tr data-id="${task.id}"></tr>`);
+        tr.html(`
+            <td>${task.id}</td>
+            <td>${task.name || '未命名任务'}</td>
+            <td>${typeDisplay}</td>
+            <td>${timeDisplay}</td>
+            <td>${userDisplay}</td>
+            <td>${statusDisplay}</td>
+            <td>${lastRunDisplay}</td>
+            <td>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-info text-white edit-schedule" data-id="${task.id}" title="编辑任务">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn btn-success execute-schedule" data-id="${task.id}" title="立即执行">
+                        <i class="fas fa-play"></i>
+                    </button>
+                    <button class="btn btn-danger delete-schedule" data-id="${task.id}" title="删除任务">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </td>
+        `);
+        tbody.append(tr);
+    });
+}
+
+// 执行定时任务
+function executeSchedule(taskId) {
+    if (!taskId) {
+        showToast('任务ID无效', 'error');
+        return;
+    }
+    
+    // 显示确认对话框
+    Swal.fire({
+        title: '确认执行',
+        text: '确定要立即执行此定时任务吗？',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: '确定执行',
+        cancelButtonText: '取消',
+        confirmButtonColor: '#28a745'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            // 显示加载中
+            showLoading('正在执行任务...');
+            
+            // 发送请求执行任务
+            axios.post(`/api/schedule/${taskId}/execute`)
+                .then(function(response) {
+                    hideLoading();
+                    if (response.data.status) {
+                        showToast('任务执行成功', 'success');
+                        
+                        // 显示详细结果
+                        if (response.data.result && response.data.result.results) {
+                            const results = response.data.result.results;
+                            const totalCount = results.length;
+                            const successCount = results.filter(r => r.status).length;
+                            
+                            let resultHTML = `
+                                <div class="alert alert-success">
+                                    <h5><i class="fas fa-check-circle me-2"></i>任务执行结果</h5>
+                                    <p>总计 ${totalCount} 个用户，成功 ${successCount} 个，失败 ${totalCount - successCount} 个</p>
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-striped">
+                                        <thead>
+                                            <tr>
+                                                <th>用户ID</th>
+                                                <th>状态</th>
+                                                <th>消息</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                            `;
+                            
+                            results.forEach(result => {
+                                const statusClass = result.status ? 'success' : 'danger';
+                                const statusText = result.status ? '成功' : '失败';
+                                
+                                resultHTML += `
+                                    <tr>
+                                        <td>${result.user_id}</td>
+                                        <td><span class="badge bg-${statusClass}">${statusText}</span></td>
+                                        <td>${result.message || '无消息'}</td>
+                                    </tr>
+                                `;
+                            });
+                            
+                            resultHTML += `
+                                        </tbody>
+                                    </table>
+                                </div>
+                            `;
+                            
+                            Swal.fire({
+                                title: '执行结果',
+                                html: resultHTML,
+                                icon: 'info',
+                                width: '800px'
+                            });
+                        }
+                        
+                        // 刷新任务列表
+                        loadScheduleTasks();
+                    } else {
+                        showToast('任务执行失败: ' + response.data.message, 'error');
+                    }
+                })
+                .catch(function(error) {
+                    hideLoading();
+                    console.error('执行任务失败:', error);
+                    showToast('执行任务失败', 'error');
+                });
+        }
+    });
+}
+
+// 删除定时任务
+function deleteSchedule(taskId) {
+    if (!taskId) {
+        showToast('任务ID无效', 'error');
+        return;
+    }
+    
+    // 显示确认对话框
+    Swal.fire({
+        title: '确认删除',
+        text: '确定要删除此定时任务吗？此操作无法恢复！',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: '确定删除',
+        cancelButtonText: '取消',
+        confirmButtonColor: '#dc3545'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            // 显示加载中
+            showLoading('正在删除任务...');
+            
+            // 发送删除请求
+            axios.delete(`/api/schedule/${taskId}`)
+                .then(function(response) {
+                    hideLoading();
+                    if (response.data.status) {
+                        showToast('任务删除成功', 'success');
+                        loadScheduleTasks();  // 刷新任务列表
+                    } else {
+                        showToast('任务删除失败: ' + response.data.message, 'error');
+                    }
+                })
+                .catch(function(error) {
+                    hideLoading();
+                    console.error('删除任务失败:', error);
+                    showToast('删除任务失败', 'error');
+                });
+        }
+    });
+}
+
+// 编辑定时任务
+function editSchedule(taskId) {
+    if (!taskId) {
+        showToast('任务ID无效', 'error');
+        return;
+    }
+    
+    // 获取任务详情
+    axios.get(`/api/schedule/${taskId}`)
+        .then(function(response) {
+            if (response.data.status && response.data.task) {
+                const task = response.data.task;
+                currentEditTaskId = task.id;
+                
+                // 填充表单
+                $('#editScheduleId').val(task.id);
+                $('#editScheduleName').val(task.name);
+                $('#editScheduleType').val(task.type).trigger('change');
+                
+                if (task.type === 'daily' || task.type === 'weekly') {
+                    $('#editScheduleTime').val(task.time);
+                    $('#editTimeSettings').removeClass('d-none');
+                    
+                    if (task.type === 'weekly' && task.days) {
+                        $('.editWeekday').prop('checked', false);
+                        task.days.forEach(day => {
+                            $(`#editWeekday${day}`).prop('checked', true);
+                        });
+                        $('#editWeekSettings').removeClass('d-none');
+                    } else {
+                        $('#editWeekSettings').addClass('d-none');
+                    }
+                } else {
+                    $('#editTimeSettings').addClass('d-none');
+                    $('#editWeekSettings').addClass('d-none');
+                }
+                
+                if (task.type === 'interval') {
+                    $('#editScheduleInterval').val(task.interval);
+                    $('#editScheduleUnit').val(task.unit);
+                    $('#editIntervalSettings').removeClass('d-none');
+                } else {
+                    $('#editIntervalSettings').addClass('d-none');
+                }
+                
+                $('#editScheduleUserType').val(task.user_type).trigger('change');
+                
+                // 清除所有选中状态
+                $('.edit-user-checkbox').prop('checked', false);
+                
+                if (task.user_type === 'phone') {
+                    // 处理多个用户ID
+                    const userIds = task.user_ids || (task.user_id ? [task.user_id] : []);
+                    
+                    // 标记选中的用户
+                    userIds.forEach(userId => {
+                        $(`#edit_user_${userId}`).prop('checked', true);
+                    });
+                    
+                    // 更新全选框状态
+                    updateSelectAllCheckbox('#editSelectAllUsers', '.edit-user-checkbox:not([disabled])');
+                } else {
+                    $('#editScheduleUserIndex').val(task.user_id);
+                }
+                
+                // 处理位置参数
+                if (task.location_address && task.location_lon && task.location_lat) {
+                    // 有自定义位置参数
+                    $('#editScheduleLocation').val('custom').trigger('change');
+                    $('#editScheduleCustomAddress').val(task.location_address);
+                    $('#editScheduleCustomLon').val(task.location_lon);
+                    $('#editScheduleCustomLat').val(task.location_lat);
+                } else if (task.location_preset_item !== undefined && task.location_preset_item !== null) {
+                    // 使用预设位置
+                    $('#editScheduleLocation').val(task.location_preset_item).trigger('change');
+                } else {
+                    // 使用默认位置
+                    $('#editScheduleLocation').val('').trigger('change');
+                }
+                
+                $('#editScheduleRandomOffset').prop('checked', task.location_random_offset !== false);
+                $('#editScheduleActive').prop('checked', task.active !== false);
+                
+                $('#editScheduleModal').modal('show');
+            } else {
+                showToast('获取任务详情失败: ' + (response.data.message || '未知错误'), 'error');
+            }
+        })
+        .catch(function(error) {
+            console.error('获取任务详情失败:', error);
+            showToast('获取任务详情失败', 'error');
+        });
 }

@@ -12,6 +12,11 @@ from functions.user import user_login, get_account_info, get_local_users
 from functions.activity import handle_activity_sign
 from utils.file import get_json_object, store_user, delete_user, get_all_users
 from sign_api import sign_by_index, sign_by_phone, sign_by_login
+# 导入定时任务管理模块
+from schedule_task import (
+    get_schedule_tasks, get_task, create_task,
+    update_task, delete_task, execute_task
+)
 
 app = Flask(__name__)
 CORS(app)  # 启用跨域支持
@@ -273,6 +278,130 @@ def delete_location_preset(phone, index):
         return jsonify({"status": False, "message": f"未找到手机号为 {phone} 的位置预设或索引无效"})
     
     return jsonify({"status": True, "message": "位置预设删除成功"})
+
+# 定时任务管理API
+
+@app.route('/api/schedule', methods=['GET'])
+def get_schedules():
+    """获取所有定时任务"""
+    tasks = get_schedule_tasks()
+    return jsonify({"status": True, "tasks": tasks})
+
+@app.route('/api/schedule/<int:task_id>', methods=['GET'])
+def get_schedule(task_id):
+    """获取指定任务详情"""
+    task = get_task(task_id)
+    if not task:
+        return jsonify({"status": False, "message": f"未找到ID为 {task_id} 的任务"})
+    
+    return jsonify({"status": True, "task": task})
+
+@app.route('/api/schedule', methods=['POST'])
+def add_schedule():
+    """添加新定时任务"""
+    data = request.json
+    
+    if not data:
+        return jsonify({"status": False, "message": "请提供任务数据"})
+    
+    # 检查必填字段
+    required_fields = ['name', 'type', 'user_type']
+    for field in required_fields:
+        if field not in data:
+            return jsonify({"status": False, "message": f"缺少必填字段: {field}"})
+    
+    # 检查用户选择
+    if 'user_ids' not in data or not data['user_ids']:
+        # 兼容旧版本，检查user_id字段
+        if 'user_id' not in data or not data['user_id']:
+            return jsonify({"status": False, "message": "请至少选择一个用户"})
+        else:
+            # 将单个user_id转换为user_ids数组
+            data['user_ids'] = [data['user_id']]
+    
+    # 根据任务类型检查其他必填字段
+    task_type = data.get('type')
+    if task_type == 'daily' or task_type == 'weekly':
+        if 'time' not in data:
+            return jsonify({"status": False, "message": "每日/每周任务必须指定时间"})
+        
+        if task_type == 'weekly' and ('days' not in data or not data['days']):
+            return jsonify({"status": False, "message": "每周任务必须指定星期几"})
+    
+    elif task_type == 'interval':
+        if 'interval' not in data:
+            return jsonify({"status": False, "message": "间隔任务必须指定间隔值"})
+        
+        if 'unit' not in data:
+            return jsonify({"status": False, "message": "间隔任务必须指定时间单位"})
+    
+    else:
+        return jsonify({"status": False, "message": f"不支持的任务类型: {task_type}"})
+    
+    # 创建任务
+    success = create_task(data)
+    
+    if success:
+        return jsonify({"status": True, "message": "任务创建成功"})
+    else:
+        return jsonify({"status": False, "message": "任务创建失败"})
+
+@app.route('/api/schedule/<int:task_id>', methods=['PUT'])
+def update_schedule(task_id):
+    """更新定时任务"""
+    data = request.json
+    
+    if not data:
+        return jsonify({"status": False, "message": "请提供更新数据"})
+    
+    # 检查任务是否存在
+    task = get_task(task_id)
+    if not task:
+        return jsonify({"status": False, "message": f"未找到ID为 {task_id} 的任务"})
+    
+    # 检查用户选择
+    if 'user_ids' in data and not data['user_ids']:
+        return jsonify({"status": False, "message": "请至少选择一个用户"})
+    
+    # 更新任务
+    success = update_task(task_id, data)
+    
+    if success:
+        return jsonify({"status": True, "message": "任务更新成功"})
+    else:
+        return jsonify({"status": False, "message": "任务更新失败"})
+
+@app.route('/api/schedule/<int:task_id>', methods=['DELETE'])
+def delete_schedule(task_id):
+    """删除定时任务"""
+    # 检查任务是否存在
+    task = get_task(task_id)
+    if not task:
+        return jsonify({"status": False, "message": f"未找到ID为 {task_id} 的任务"})
+    
+    # 删除任务
+    success = delete_task(task_id)
+    
+    if success:
+        return jsonify({"status": True, "message": "任务删除成功"})
+    else:
+        return jsonify({"status": False, "message": "任务删除失败"})
+
+@app.route('/api/schedule/<int:task_id>/execute', methods=['POST'])
+def execute_schedule(task_id):
+    """立即执行指定的定时任务"""
+    # 检查任务是否存在
+    task = get_task(task_id)
+    if not task:
+        return jsonify({"status": False, "message": f"未找到ID为 {task_id} 的任务"})
+    
+    # 执行任务
+    result = execute_task(task_id)
+    
+    if result and result.get('status', False):
+        return jsonify({"status": True, "message": "任务执行成功", "result": result})
+    else:
+        return jsonify({"status": False, "message": f"任务执行失败: {result.get('message', '未知错误')}", "result": result})
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000) 

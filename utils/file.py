@@ -209,4 +209,55 @@ def delete_user(phone):
         return True
     except Exception as e:
         print(f"删除用户失败: {e}")
-        return False 
+        return False
+
+def get_schedule_tasks():
+    """获取所有定时签到任务"""
+    tasks = []
+    try:
+        json_object = get_json_object('configs/schedule.json')
+        if 'tasks' in json_object:
+            tasks = json_object['tasks']
+    except:
+        # 如果文件不存在或格式不正确，返回空列表
+        tasks = []
+    
+    return tasks
+
+def save_schedule_tasks(tasks):
+    """保存定时签到任务列表"""
+    try:
+        data = {'tasks': tasks}
+        with open('configs/schedule.json', 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+        return True
+    except Exception as e:
+        print(f"保存定时任务失败: {e}")
+        return False
+
+def add_schedule_task(task):
+    """添加定时签到任务"""
+    tasks = get_schedule_tasks()
+    # 生成任务ID
+    task_id = 1
+    if tasks:
+        task_id = max([t.get('id', 0) for t in tasks]) + 1
+    
+    task['id'] = task_id
+    tasks.append(task)
+    return save_schedule_tasks(tasks)
+
+def update_schedule_task(task_id, task_data):
+    """更新定时签到任务"""
+    tasks = get_schedule_tasks()
+    for i, task in enumerate(tasks):
+        if task.get('id') == task_id:
+            tasks[i].update(task_data)
+            return save_schedule_tasks(tasks)
+    return False
+
+def delete_schedule_task(task_id):
+    """删除定时签到任务"""
+    tasks = get_schedule_tasks()
+    tasks = [t for t in tasks if t.get('id') != task_id]
+    return save_schedule_tasks(tasks) 
