@@ -40,7 +40,7 @@ ENV/
 logs/
 
 #数据文件
-chaoxing/configs/storage.json
+configs/storage.json
 
 #临时文件
 temp/
