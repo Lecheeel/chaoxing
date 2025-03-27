@@ -41,6 +41,7 @@ logs/
 
 #数据文件
 configs/storage.json
+configs/schedule.json
 
 #临时文件
 temp/
