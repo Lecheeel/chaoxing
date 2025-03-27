@@ -3,6 +3,9 @@ import time
 import threading
 import schedule
 import datetime
+import logging
+import traceback
+import os
 from dateutil import parser
 
 from utils.file import get_schedule_tasks, save_schedule_tasks, update_schedule_task
@@ -13,106 +16,221 @@ from sign_api import sign_by_phone, sign_by_index
 # 全局线程对象，用于控制定时任务执行
 scheduler_thread = None
 stop_scheduler = False
+scheduler_lock = threading.RLock()  # 用于线程安全操作
+max_consecutive_errors = 5  # 最大连续错误次数
+consecutive_errors = 0  # 当前连续错误次数
+scheduler_healthy = True  # 调度器健康状态
+
+# 确保日志目录存在
+def ensure_log_dir():
+    if not os.path.exists('logs'):
+        os.makedirs('logs')
+
+# 配置日志
+def setup_scheduler_logging():
+    ensure_log_dir()
+    
+    logger = logging.getLogger('scheduler')
+    logger.setLevel(logging.INFO)
+    
+    # 防止重复添加处理器
+    if not logger.handlers:
+        # 文件处理器
+        file_handler = logging.FileHandler('logs/scheduler.log', encoding='utf-8')
+        file_format = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        file_handler.setFormatter(file_format)
+        logger.addHandler(file_handler)
+        
+        # 控制台处理器
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(file_format)
+        logger.addHandler(console_handler)
+    
+    return logger
+
+# 获取调度器日志记录器
+scheduler_logger = setup_scheduler_logging()
+
+def log_scheduler_event(message, level='info'):
+    """记录调度器事件"""
+    getattr(scheduler_logger, level)(message)
+    if is_debug_mode():
+        debug_print(message, "blue" if level == 'info' else "red")
+    colored_print(message, "green" if level == 'info' else "red")
 
 def initialize_scheduler():
     """初始化定时任务调度器"""
-    global scheduler_thread, stop_scheduler
+    global scheduler_thread, stop_scheduler, consecutive_errors, scheduler_healthy
     
-    # 重置停止标志
-    stop_scheduler = False
-    
-    # 如果已有线程在运行，则不再创建新线程
-    if scheduler_thread and scheduler_thread.is_alive():
-        return
-    
-    # 清除已有的任务
-    schedule.clear()
-    
-    # 加载所有任务
-    tasks = get_schedule_tasks()
-    for task in tasks:
-        if task.get('active', True):
-            register_task(task)
-    
-    # 创建并启动线程
-    scheduler_thread = threading.Thread(target=run_scheduler)
-    scheduler_thread.daemon = True
-    scheduler_thread.start()
-    
-    if is_debug_mode():
-        debug_print("定时任务调度器已启动", "green")
-    
-    colored_print("定时任务调度器已启动", "green")
+    with scheduler_lock:
+        # 重置停止标志和错误计数
+        stop_scheduler = False
+        consecutive_errors = 0
+        scheduler_healthy = True
+        
+        # 如果已有线程在运行，则不再创建新线程
+        if scheduler_thread and scheduler_thread.is_alive():
+            log_scheduler_event("调度器已在运行，跳过初始化")
+            return
+        
+        # 清除已有的任务
+        schedule.clear()
+        
+        try:
+            # 加载所有任务
+            tasks = get_schedule_tasks()
+            task_count = 0
+            
+            for task in tasks:
+                if task.get('active', True):
+                    register_task(task)
+                    task_count += 1
+            
+            # 创建并启动线程
+            scheduler_thread = threading.Thread(target=run_scheduler)
+            scheduler_thread.daemon = True
+            scheduler_thread.start()
+            
+            log_scheduler_event(f"定时任务调度器已启动，已加载 {task_count} 个活动任务")
+        except Exception as e:
+            error_msg = f"初始化调度器失败: {str(e)}"
+            log_scheduler_event(error_msg, 'error')
+            log_scheduler_event(traceback.format_exc(), 'error')
+            scheduler_healthy = False
+            raise
 
 def run_scheduler():
     """运行定时任务调度器的后台线程"""
-    global stop_scheduler
+    global stop_scheduler, consecutive_errors, scheduler_healthy
+    
+    log_scheduler_event("调度器线程已启动")
     
     while not stop_scheduler:
-        schedule.run_pending()
-        time.sleep(1)
+        try:
+            schedule.run_pending()
+            # 成功执行一次后重置错误计数
+            if consecutive_errors > 0:
+                log_scheduler_event(f"调度器恢复正常运行，重置错误计数")
+                consecutive_errors = 0
+                scheduler_healthy = True
+                
+            time.sleep(1)
+        except Exception as e:
+            consecutive_errors += 1
+            error_msg = f"调度器运行异常 ({consecutive_errors}/{max_consecutive_errors}): {str(e)}"
+            log_scheduler_event(error_msg, 'error')
+            
+            if consecutive_errors >= max_consecutive_errors:
+                log_scheduler_event("连续错误次数过多，标记调度器为不健康状态", 'error')
+                scheduler_healthy = False
+                
+                # 尝试重新初始化调度器
+                try:
+                    log_scheduler_event("尝试重置调度器...", 'warning')
+                    schedule.clear()
+                    tasks = get_schedule_tasks()
+                    for task in tasks:
+                        if task.get('active', True):
+                            register_task(task)
+                    consecutive_errors = 0
+                    scheduler_healthy = True
+                    log_scheduler_event("调度器已成功重置", 'info')
+                except Exception as reset_error:
+                    log_scheduler_event(f"重置调度器失败: {str(reset_error)}", 'error')
+            
+            # 短暂暂停后继续
+            time.sleep(5)
     
-    if is_debug_mode():
-        debug_print("定时任务调度器已停止", "yellow")
+    log_scheduler_event("定时任务调度器已停止", 'warning')
 
 def stop_scheduler_thread():
     """停止定时任务调度器"""
     global stop_scheduler
-    stop_scheduler = True
+    with scheduler_lock:
+        stop_scheduler = True
+        log_scheduler_event("已发送停止信号给调度器线程")
+
+def get_scheduler_status():
+    """获取调度器当前状态"""
+    global scheduler_thread, scheduler_healthy
+    
+    with scheduler_lock:
+        is_running = scheduler_thread is not None and scheduler_thread.is_alive()
+        
+        return {
+            "running": is_running,
+            "healthy": scheduler_healthy,
+            "error_count": consecutive_errors,
+            "tasks_count": len(schedule.jobs)
+        }
 
 def register_task(task):
     """注册一个定时任务到调度器"""
     task_id = task.get('id')
     task_type = task.get('type')
+    task_name = task.get('name', f'任务{task_id}')
     
-    if task_type == 'daily':
-        # 每日固定时间执行
-        time_str = task.get('time')
-        if time_str:
-            job = schedule.every().day.at(time_str).do(execute_task, task_id=task_id)
-            if is_debug_mode():
-                debug_print(f"已注册每日任务，ID: {task_id}, 时间: {time_str}", "blue")
-    
-    elif task_type == 'weekly':
-        # 每周固定时间执行
-        time_str = task.get('time')
-        days = task.get('days', [])
+    try:
+        if task_type == 'daily':
+            # 每日固定时间执行
+            time_str = task.get('time')
+            if time_str:
+                job = schedule.every().day.at(time_str).do(execute_task, task_id=task_id)
+                log_scheduler_event(f"已注册每日任务: {task_name} (ID: {task_id}), 时间: {time_str}")
         
-        if time_str and days:
-            for day in days:
-                if day == 0:  # 周一
-                    job = schedule.every().monday.at(time_str).do(execute_task, task_id=task_id)
-                elif day == 1:  # 周二
-                    job = schedule.every().tuesday.at(time_str).do(execute_task, task_id=task_id)
-                elif day == 2:  # 周三
-                    job = schedule.every().wednesday.at(time_str).do(execute_task, task_id=task_id)
-                elif day == 3:  # 周四
-                    job = schedule.every().thursday.at(time_str).do(execute_task, task_id=task_id)
-                elif day == 4:  # 周五
-                    job = schedule.every().friday.at(time_str).do(execute_task, task_id=task_id)
-                elif day == 5:  # 周六
-                    job = schedule.every().saturday.at(time_str).do(execute_task, task_id=task_id)
-                elif day == 6:  # 周日
-                    job = schedule.every().sunday.at(time_str).do(execute_task, task_id=task_id)
+        elif task_type == 'weekly':
+            # 每周固定时间执行
+            time_str = task.get('time')
+            days = task.get('days', [])
             
-            if is_debug_mode():
-                days_str = ", ".join(["周一", "周二", "周三", "周四", "周五", "周六", "周日"][d] for d in days)
-                debug_print(f"已注册每周任务，ID: {task_id}, 时间: {time_str}, 日期: {days_str}", "blue")
-    
-    elif task_type == 'interval':
-        # 间隔执行任务
-        interval = task.get('interval', 3600)  # 默认1小时
-        unit = task.get('unit', 'seconds')
+            if time_str and days:
+                days_names = []
+                for day in days:
+                    if day == 0:  # 周一
+                        schedule.every().monday.at(time_str).do(execute_task, task_id=task_id)
+                        days_names.append("周一")
+                    elif day == 1:  # 周二
+                        schedule.every().tuesday.at(time_str).do(execute_task, task_id=task_id)
+                        days_names.append("周二")
+                    elif day == 2:  # 周三
+                        schedule.every().wednesday.at(time_str).do(execute_task, task_id=task_id)
+                        days_names.append("周三")
+                    elif day == 3:  # 周四
+                        schedule.every().thursday.at(time_str).do(execute_task, task_id=task_id)
+                        days_names.append("周四")
+                    elif day == 4:  # 周五
+                        schedule.every().friday.at(time_str).do(execute_task, task_id=task_id)
+                        days_names.append("周五")
+                    elif day == 5:  # 周六
+                        schedule.every().saturday.at(time_str).do(execute_task, task_id=task_id)
+                        days_names.append("周六")
+                    elif day == 6:  # 周日
+                        schedule.every().sunday.at(time_str).do(execute_task, task_id=task_id)
+                        days_names.append("周日")
+                
+                days_str = ", ".join(days_names)
+                log_scheduler_event(f"已注册每周任务: {task_name} (ID: {task_id}), 时间: {time_str}, 日期: {days_str}")
         
-        if unit == 'minutes':
-            job = schedule.every(interval).minutes.do(execute_task, task_id=task_id)
-        elif unit == 'hours':
-            job = schedule.every(interval).hours.do(execute_task, task_id=task_id)
-        else:  # seconds
-            job = schedule.every(interval).seconds.do(execute_task, task_id=task_id)
-        
-        if is_debug_mode():
-            debug_print(f"已注册间隔任务，ID: {task_id}, 间隔: {interval} {unit}", "blue")
+        elif task_type == 'interval':
+            # 间隔执行任务
+            interval = task.get('interval', 3600)  # 默认1小时
+            unit = task.get('unit', 'seconds')
+            
+            if unit == 'minutes':
+                job = schedule.every(interval).minutes.do(execute_task, task_id=task_id)
+                unit_str = "分钟"
+            elif unit == 'hours':
+                job = schedule.every(interval).hours.do(execute_task, task_id=task_id)
+                unit_str = "小时"
+            else:  # seconds
+                job = schedule.every(interval).seconds.do(execute_task, task_id=task_id)
+                unit_str = "秒"
+            
+            log_scheduler_event(f"已注册间隔任务: {task_name} (ID: {task_id}), 间隔: {interval} {unit_str}")
+    except Exception as e:
+        error_msg = f"注册任务 {task_name} (ID: {task_id}) 失败: {str(e)}"
+        log_scheduler_event(error_msg, 'error')
+        log_scheduler_event(traceback.format_exc(), 'error')
 
 def execute_task(task_id):
     """执行指定ID的定时任务"""
@@ -126,15 +244,13 @@ def execute_task(task_id):
             break
     
     if not task:
-        if is_debug_mode():
-            debug_print(f"找不到ID为 {task_id} 的任务", "red")
-        return
+        log_scheduler_event(f"找不到ID为 {task_id} 的任务", 'error')
+        return {"status": False, "message": f"找不到任务 ID: {task_id}"}
     
     # 检查任务是否激活
     if not task.get('active', True):
-        if is_debug_mode():
-            debug_print(f"任务 {task_id} 已禁用，跳过执行", "yellow")
-        return
+        log_scheduler_event(f"任务 {task_id} 已禁用，跳过执行", 'warning')
+        return {"status": False, "message": "任务已禁用"}
     
     # 获取任务信息
     task_name = task.get('name', f'任务{task_id}')
@@ -147,8 +263,8 @@ def execute_task(task_id):
     
     # 如果没有用户ID，则记录错误并返回
     if not user_ids:
-        if is_debug_mode():
-            debug_print(f"任务 {task_name} 没有指定用户ID", "red")
+        error_msg = f"任务 {task_name} 没有指定用户ID"
+        log_scheduler_event(error_msg, 'error')
         
         # 更新任务的最后执行时间和结果
         now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -184,8 +300,7 @@ def execute_task(task_id):
             'lat': location_lat
         }
     
-    if is_debug_mode():
-        debug_print(f"开始执行任务 {task_name} (ID: {task_id})", "blue")
+    log_scheduler_event(f"开始执行任务 {task_name} (ID: {task_id})")
     
     # 存储所有执行结果
     all_results = []
@@ -239,102 +354,148 @@ def execute_task(task_id):
             else:
                 failed_count += 1
             
-            if is_debug_mode():
-                status_str = "成功" if result.get('status', False) else "失败"
-                debug_print(f"用户 {user_id} 执行{status_str}: {result.get('message', '未知结果')}", 
-                           "green" if result.get('status', False) else "red")
-        
+            status_str = "成功" if result.get('status', False) else "失败"
+            log_scheduler_event(
+                f"任务 {task_name} 为用户 {user_id} 执行{status_str}: {result.get('message', '未知结果')}",
+                'info' if result.get('status', False) else 'warning'
+            )
+            
         except Exception as e:
             # 处理单个用户的异常，不影响其他用户
+            error_msg = f"任务 {task_name} 为用户 {user_id} 执行出错: {str(e)}"
+            log_scheduler_event(error_msg, 'error')
+            log_scheduler_event(traceback.format_exc(), 'error')
+            
             all_results.append({
                 'user_id': user_id,
                 'status': False,
                 'message': f"执行出错: {str(e)}"
             })
             failed_count += 1
-            
-            if is_debug_mode():
-                debug_print(f"用户 {user_id} 执行出错: {str(e)}", "red")
-    
-    # 计算总体结果
-    total_count = len(user_ids)
-    overall_status = success_count > 0
-    summary_message = f"总计 {total_count} 个用户，成功 {success_count}，失败 {failed_count}"
     
     # 更新任务的最后执行时间和结果
     now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
+    # 根据结果生成摘要
+    if success_count > 0 and failed_count == 0:
+        status = True
+        message = f"全部成功，共 {success_count} 个用户"
+    elif success_count > 0 and failed_count > 0:
+        status = True
+        message = f"部分成功 ({success_count}/{success_count+failed_count})"
+    else:
+        status = False
+        message = f"全部失败，共 {failed_count} 个用户"
+    
     last_run = {
         'time': now,
-        'status': overall_status,
-        'message': summary_message,
+        'status': status,
+        'message': message,
         'details': all_results
     }
     
     task['last_run'] = last_run
     update_schedule_task(task_id, task)
     
-    if is_debug_mode():
-        debug_print(f"任务 {task_name} 执行完成: {summary_message}", 
-                  "green" if overall_status else "yellow")
+    log_scheduler_event(f"任务 {task_name} 执行完成: {message}")
     
     return {
-        'status': overall_status,
-        'message': summary_message,
-        'results': all_results
+        'status': status,
+        'message': message,
+        'results': all_results,
+        'success_count': success_count,
+        'failed_count': failed_count
     }
 
 def create_task(task_data):
-    """创建一个新的定时任务"""
-    from utils.file import add_schedule_task
+    """创建新的定时任务"""
+    tasks = get_schedule_tasks()
     
-    # 添加默认字段
-    if 'active' not in task_data:
-        task_data['active'] = True
+    # 生成新任务ID
+    if tasks:
+        max_id = max(task.get('id', 0) for task in tasks)
+        new_id = max_id + 1
+    else:
+        new_id = 1
+    
+    # 设置任务ID
+    task_data['id'] = new_id
     
     # 添加创建时间
     task_data['created_at'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     
-    # 保存到文件
-    success = add_schedule_task(task_data)
+    # 添加到任务列表
+    tasks.append(task_data)
+    save_schedule_tasks(tasks)
     
-    if success and task_data.get('active', True):
-        # 清除现有调度并重新初始化
-        schedule.clear()
-        initialize_scheduler()
+    # 如果任务是激活的，注册到调度器
+    if task_data.get('active', True):
+        register_task(task_data)
     
-    return success
+    return new_id
 
 def update_task(task_id, task_data):
     """更新定时任务"""
-    success = update_schedule_task(task_id, task_data)
-    
-    if success:
-        # 清除现有调度并重新初始化
+    result = update_schedule_task(task_id, task_data)
+    if result:
+        # 清除并重新加载所有任务
         schedule.clear()
-        initialize_scheduler()
-    
-    return success
+        tasks = get_schedule_tasks()
+        for task in tasks:
+            if task.get('active', True):
+                register_task(task)
+    return result
 
 def delete_task(task_id):
     """删除定时任务"""
-    from utils.file import delete_schedule_task
+    tasks = get_schedule_tasks()
     
-    success = delete_schedule_task(task_id)
+    # 查找并删除任务
+    found = False
+    for i, task in enumerate(tasks):
+        if task.get('id') == task_id:
+            del tasks[i]
+            found = True
+            break
     
-    if success:
-        # 清除现有调度并重新初始化
+    if found:
+        save_schedule_tasks(tasks)
+        
+        # 清除并重新加载所有任务
         schedule.clear()
-        initialize_scheduler()
+        for task in tasks:
+            if task.get('active', True):
+                register_task(task)
+        
+        return True
     
-    return success
+    return False
 
 def get_task(task_id):
     """获取指定ID的任务"""
     tasks = get_schedule_tasks()
+    
     for task in tasks:
         if task.get('id') == task_id:
             return task
+    
     return None
+
+def restart_scheduler():
+    """重启调度器"""
+    log_scheduler_event("正在重启调度器...", 'warning')
+    
+    # 停止当前调度器
+    stop_scheduler_thread()
+    
+    # 等待线程完全停止
+    if scheduler_thread and scheduler_thread.is_alive():
+        scheduler_thread.join(timeout=5)
+    
+    # 重新初始化调度器
+    initialize_scheduler()
+    
+    return get_scheduler_status()
 
 # 程序启动时自动初始化调度器
 # initialize_scheduler() 
