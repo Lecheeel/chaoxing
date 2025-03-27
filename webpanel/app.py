@@ -222,5 +222,33 @@ def add_location_preset(phone):
     
     return jsonify({"status": True, "message": "位置预设添加成功"})
 
+@app.route('/api/location/presets/<phone>/<int:index>', methods=['DELETE'])
+def delete_location_preset(phone, index):
+    """删除指定用户的位置预设"""
+    # 获取用户信息
+    users_data = get_json_object('configs/storage.json')
+    
+    # 查找并更新用户
+    found = False
+    for i, user in enumerate(users_data.get('users', [])):
+        if user.get('phone') == phone:
+            # 检查monitor和presetAddress字段是否存在
+            if ('monitor' in user and 
+                'presetAddress' in user['monitor'] and 
+                len(user['monitor']['presetAddress']) > index):
+                
+                # 删除指定索引的位置预设
+                user['monitor']['presetAddress'].pop(index)
+                
+                # 保存更新后的数据
+                store_user(phone, user)
+                found = True
+            break
+    
+    if not found:
+        return jsonify({"status": False, "message": f"未找到手机号为 {phone} 的位置预设或索引无效"})
+    
+    return jsonify({"status": True, "message": "位置预设删除成功"})
+
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000) 

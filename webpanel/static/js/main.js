@@ -3,29 +3,31 @@ let users = [];
 let currentSelectedUser = null;
 let userPresets = {};
 
-// DOM元素加载完成后执行
-document.addEventListener('DOMContentLoaded', function() {
+// 使用jQuery而非原生JS来处理DOM加载完成事件
+$(document).ready(function() {
+    console.log('DOM已通过jQuery加载完成');
+    
     // 初始化页面
     loadUsers();
     
     // 绑定事件
-    document.getElementById('addUserBtn').addEventListener('click', addUser);
-    document.getElementById('saveUserBtn').addEventListener('click', saveUser);
-    document.getElementById('batchSignBtn').addEventListener('click', batchSign);
-    document.getElementById('userSelect').addEventListener('change', userSelectChanged);
-    document.getElementById('addLocationBtn').addEventListener('click', addLocationPreset);
-    document.getElementById('batchSetLocationBtn').addEventListener('click', showBatchSetLocationModal);
-    document.getElementById('saveBatchLocationBtn').addEventListener('click', saveBatchLocation);
-    document.getElementById('togglePassword').addEventListener('click', togglePassword);
+    $('#addUserBtn').on('click', addUser);
+    $('#saveUserBtn').on('click', saveUser);
+    $('#batchSignBtn').on('click', function() {
+        console.log('批量签到按钮被jQuery点击');
+        batchSign();
+    });
+    $('#userSelect').on('change', userSelectChanged);
+    $('#addLocationBtn').on('click', addLocationPreset);
+    $('#batchSetLocationBtn').on('click', showBatchSetLocationModal);
+    $('#saveBatchLocationBtn').on('click', saveBatchLocation);
+    $('#togglePassword').on('click', togglePassword);
+    $('#toggleCurrentPassword').on('click', toggleCurrentPassword);
     
     // 设置导航链接功能
-    document.querySelectorAll('.navbar-nav .nav-link').forEach(link => {
-        link.addEventListener('click', function() {
-            document.querySelectorAll('.navbar-nav .nav-link').forEach(l => {
-                l.classList.remove('active');
-            });
-            this.classList.add('active');
-        });
+    $('.navbar-nav .nav-link').on('click', function() {
+        $('.navbar-nav .nav-link').removeClass('active');
+        $(this).addClass('active');
     });
 });
 
@@ -178,6 +180,18 @@ function editUser(phone) {
     // 设置模态框数据
     document.getElementById('editPhone').value = phone;
     document.getElementById('editUsername').value = user.username || '';
+    
+    // 设置当前密码
+    const currentPasswordInput = document.getElementById('currentPassword');
+    if (user.password) {
+        currentPasswordInput.value = user.password;
+        // 默认密码显示为掩码
+        currentPasswordInput.type = 'password';
+        document.querySelector('#toggleCurrentPassword i').className = 'fas fa-eye';
+    } else {
+        currentPasswordInput.value = '密码信息不可用';
+    }
+    
     document.getElementById('editPassword').value = '';
     document.getElementById('editActive').checked = user.active !== false;
     
@@ -306,55 +320,77 @@ function signUser(phone) {
 
 // 批量签到
 function batchSign() {
-    Swal.fire({
-        title: '批量签到',
-        text: '确认要为所有用户执行批量签到吗？',
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonColor: '#28a745',
-        cancelButtonColor: '#6c757d',
-        confirmButtonText: '确认签到',
-        cancelButtonText: '取消'
-    }).then((result) => {
-        if (result.isConfirmed) {
-            // 获取签到设置
-            const excludeInactive = document.getElementById('excludeInactiveUsers').checked;
-            const useRandomOffset = document.getElementById('useRandomOffset').checked;
-            
-            // 显示加载状态
-            const batchSignBtn = document.getElementById('batchSignBtn');
-            const originalText = batchSignBtn.textContent;
-            batchSignBtn.textContent = '签到中...';
-            batchSignBtn.disabled = true;
-            
-            // 清空结果区域
-            const resultDiv = document.getElementById('batchSignResult');
-            resultDiv.innerHTML = '<div class="alert alert-info">正在执行批量签到，请稍候...</div>';
-            
-            // 签到请求
-            axios.post('/api/sign/all', {
-                exclude_inactive: excludeInactive,
-                location_random_offset: useRandomOffset
-            })
-                .then(response => {
-                    if (response.data.status) {
-                        // 显示签到结果
-                        showBatchSignResults(response.data.results);
-                    } else {
-                        showError('批量签到失败: ' + response.data.message);
-                    }
-                })
-                .catch(error => {
-                    console.error('批量签到出错:', error);
-                    showError('批量签到时发生错误: ' + (error.message || '未知错误'));
-                })
-                .finally(() => {
-                    // 恢复按钮状态
-                    batchSignBtn.textContent = originalText;
-                    batchSignBtn.disabled = false;
-                });
+    console.log('批量签到按钮被点击');
+    
+    // 检查SweetAlert2是否可用
+    if (typeof Swal !== 'undefined') {
+        console.log('使用SweetAlert2弹窗');
+        Swal.fire({
+            title: '批量签到',
+            text: '确认要为所有用户执行批量签到吗？',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#28a745',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: '确认签到',
+            cancelButtonText: '取消'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                executeBatchSign();
+            }
+        });
+    } else {
+        console.log('SweetAlert2未加载，使用原生confirm');
+        if (confirm('确认要为所有用户执行批量签到吗？')) {
+            executeBatchSign();
         }
-    });
+    }
+}
+
+// 执行批量签到逻辑
+function executeBatchSign() {
+    console.log('用户确认了批量签到操作');
+    // 获取签到设置
+    const excludeInactive = document.getElementById('excludeInactiveUsers').checked;
+    const useRandomOffset = document.getElementById('useRandomOffset').checked;
+    
+    console.log('签到设置:', {excludeInactive, useRandomOffset});
+    
+    // 显示加载状态
+    const batchSignBtn = document.getElementById('batchSignBtn');
+    const originalText = batchSignBtn.textContent;
+    batchSignBtn.textContent = '签到中...';
+    batchSignBtn.disabled = true;
+    
+    // 清空结果区域
+    const resultDiv = document.getElementById('batchSignResult');
+    resultDiv.innerHTML = '<div class="alert alert-info">正在执行批量签到，请稍候...</div>';
+    
+    // 签到请求
+    console.log('发送批量签到请求');
+    axios.post('/api/sign/all', {
+        exclude_inactive: excludeInactive,
+        location_random_offset: useRandomOffset
+    })
+        .then(response => {
+            console.log('批量签到响应:', response.data);
+            if (response.data.status) {
+                // 显示签到结果
+                showBatchSignResults(response.data.results);
+            } else {
+                showError('批量签到失败: ' + response.data.message);
+            }
+        })
+        .catch(error => {
+            console.error('批量签到出错:', error);
+            showError('批量签到时发生错误: ' + (error.message || '未知错误'));
+        })
+        .finally(() => {
+            console.log('批量签到请求完成');
+            // 恢复按钮状态
+            batchSignBtn.textContent = originalText;
+            batchSignBtn.disabled = false;
+        });
 }
 
 // 显示批量签到结果
@@ -549,8 +585,34 @@ function deletePreset(phone, index) {
         cancelButtonText: '取消'
     }).then((result) => {
         if (result.isConfirmed) {
-            // TODO: 实现删除位置预设的API调用
-            showError('删除位置预设功能暂未实现');
+            // 显示加载状态
+            Swal.fire({
+                title: '删除中',
+                text: '正在删除位置预设，请稍候...',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+            
+            // 调用删除API
+            axios.delete(`/api/location/presets/${phone}/${index}`)
+                .then(response => {
+                    if (response.data.status) {
+                        Swal.close();
+                        
+                        // 刷新位置预设
+                        loadLocationPresets();
+                        
+                        showSuccess('位置预设删除成功');
+                    } else {
+                        showError(response.data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('删除位置预设出错:', error);
+                    showError('删除位置预设时发生错误: ' + (error.message || '未知错误'));
+                });
         }
     });
 }
@@ -563,12 +625,25 @@ function togglePassword() {
     
     if (passwordInput.type === 'password') {
         passwordInput.type = 'text';
-        icon.classList.remove('bi-eye');
-        icon.classList.add('bi-eye-slash');
+        icon.className = 'fas fa-eye-slash';
     } else {
         passwordInput.type = 'password';
-        icon.classList.remove('bi-eye-slash');
-        icon.classList.add('bi-eye');
+        icon.className = 'fas fa-eye';
+    }
+}
+
+// 切换当前密码显示/隐藏
+function toggleCurrentPassword() {
+    const passwordInput = document.getElementById('currentPassword');
+    const toggleBtn = document.getElementById('toggleCurrentPassword');
+    const icon = toggleBtn.querySelector('i');
+    
+    if (passwordInput.type === 'password') {
+        passwordInput.type = 'text';
+        icon.className = 'fas fa-eye-slash';
+    } else {
+        passwordInput.type = 'password';
+        icon.className = 'fas fa-eye';
     }
 }
 
@@ -708,26 +783,38 @@ function hideLoading() {
 
 // 辅助函数：显示成功消息
 function showSuccess(message) {
-    // 使用Toastify显示轻量级成功提示
-    Toastify({
-        text: message,
-        duration: 3000,
-        gravity: "top",
-        position: "right",
-        style: {
-            background: "linear-gradient(to right, #00b09b, #96c93d)",
-        },
-        onClick: function(){} // 点击关闭
-    }).showToast();
+    // 检查Toastify是否可用
+    if (typeof Toastify !== 'undefined') {
+        // 使用Toastify显示轻量级成功提示
+        Toastify({
+            text: message,
+            duration: 3000,
+            gravity: "top",
+            position: "right",
+            style: {
+                background: "linear-gradient(to right, #00b09b, #96c93d)",
+            },
+            onClick: function(){} // 点击关闭
+        }).showToast();
+    } else {
+        // 降级为原生alert
+        alert(message);
+    }
 }
 
 // 辅助函数：显示错误消息
 function showError(message) {
-    // 使用SweetAlert2显示错误提示
-    Swal.fire({
-        icon: 'error',
-        title: '操作失败',
-        text: message,
-        confirmButtonColor: '#dc3545'
-    });
+    // 检查SweetAlert2是否可用
+    if (typeof Swal !== 'undefined') {
+        // 使用SweetAlert2显示错误提示
+        Swal.fire({
+            icon: 'error',
+            title: '操作失败',
+            text: message,
+            confirmButtonColor: '#dc3545'
+        });
+    } else {
+        // 降级为原生alert
+        alert('错误: ' + message);
+    }
 } 
