@@ -33,7 +33,7 @@ $(document).ready(function() {
 
 // 加载用户列表
 function loadUsers() {
-    showLoading('用户列表');
+    showLoading('加载用户列表');
     
     axios.get('/api/users')
         .then(response => {
@@ -44,11 +44,13 @@ function loadUsers() {
                 loadLocationPresets();
                 hideLoading();
             } else {
+                hideLoading();
                 showError('加载用户失败: ' + response.data.message);
             }
         })
         .catch(error => {
             console.error('获取用户数据出错:', error);
+            hideLoading();
             showError('获取用户数据时发生错误: ' + (error.message || '未知错误'));
         });
 }
@@ -65,27 +67,26 @@ function updateUserTable() {
         return;
     }
     
-    users.forEach(user => {
-        const tr = document.createElement('tr');
+    // 使用模板
+    const actionTemplate = document.getElementById('userActionsTemplate');
+    const statusTemplate = document.getElementById('userStatusTemplate');
+    
+    users.forEach((user, index) => {
+        const row = document.createElement('tr');
         
-        // 激活状态样式
-        const isActive = user.active !== false;
-        if (!isActive) {
-            tr.classList.add('table-secondary');
-        }
-        
-        tr.innerHTML = `
-            <td>${user.id !== undefined ? user.id : '-'}</td>
+        // ID列
+        row.innerHTML = `
+            <td>${index + 1}</td>
             <td>${user.username || '未知用户'}</td>
-            <td>${user.phone || '-'}</td>
+            <td>${user.phone}</td>
             <td>
                 <div class="form-check form-switch d-flex justify-content-center">
                     <input class="form-check-input" type="checkbox" role="switch" 
                         id="activeSwitch_${user.phone}" 
-                        ${isActive ? 'checked' : ''} 
+                        ${user.active ? 'checked' : ''} 
                         onchange="toggleUserActive('${user.phone}', this.checked)">
                     <label class="form-check-label ms-2" for="activeSwitch_${user.phone}">
-                        <span class="badge ${isActive ? 'bg-success' : 'bg-secondary'}">${isActive ? '已激活' : '未激活'}</span>
+                        <span class="badge ${user.active ? 'bg-success' : 'bg-secondary'}">${user.active ? '已激活' : '未激活'}</span>
                     </label>
                 </div>
             </td>
@@ -97,7 +98,7 @@ function updateUserTable() {
                 </div>
             </td>
         `;
-        tbody.appendChild(tr);
+        tbody.appendChild(row);
     });
 }
 
@@ -138,13 +139,11 @@ function addUser() {
     }
     
     // 显示加载状态
-    const addUserBtn = document.getElementById('addUserBtn');
-    const originalText = addUserBtn.textContent;
-    addUserBtn.textContent = '添加中...';
-    addUserBtn.disabled = true;
+    showLoading('添加用户');
     
     axios.post('/api/users', { phone, password })
         .then(response => {
+            hideLoading();
             if (response.data.status) {
                 // 重置表单并关闭模态框
                 document.getElementById('addUserForm').reset();
@@ -160,12 +159,8 @@ function addUser() {
         })
         .catch(error => {
             console.error('添加用户出错:', error);
+            hideLoading();
             showError('添加用户时发生错误: ' + (error.message || '未知错误'));
-        })
-        .finally(() => {
-            // 恢复按钮状态
-            addUserBtn.textContent = originalText;
-            addUserBtn.disabled = false;
         });
 }
 
@@ -178,6 +173,7 @@ function editUser(phone) {
     }
     
     // 设置模态框数据
+    document.getElementById('originalPhone').value = phone; // 保存原始手机号用于后续更新
     document.getElementById('editPhone').value = phone;
     document.getElementById('editUsername').value = user.username || '';
     
@@ -201,25 +197,32 @@ function editUser(phone) {
 
 // 保存编辑后的用户信息
 function saveUser() {
-    const phone = document.getElementById('editPhone').value;
-    const username = document.getElementById('editUsername').value.trim();
+    const originalPhone = document.getElementById('originalPhone').value;
+    const newPhone = document.getElementById('editPhone').value.trim();
     const password = document.getElementById('editPassword').value.trim();
     const active = document.getElementById('editActive').checked;
     
+    if (!newPhone) {
+        showError('手机号不能为空');
+        return;
+    }
+    
     // 构建要更新的数据
-    const data = { username, active };
+    const data = { 
+        phone: newPhone,
+        active 
+    };
+    
     if (password) {
         data.password = password;
     }
     
     // 显示加载状态
-    const saveUserBtn = document.getElementById('saveUserBtn');
-    const originalText = saveUserBtn.textContent;
-    saveUserBtn.textContent = '保存中...';
-    saveUserBtn.disabled = true;
+    showLoading('保存用户信息');
     
-    axios.put(`/api/users/${phone}`, data)
+    axios.put(`/api/users/${originalPhone}`, data)
         .then(response => {
+            hideLoading();
             if (response.data.status) {
                 // 关闭模态框
                 bootstrap.Modal.getInstance(document.getElementById('editUserModal')).hide();
@@ -234,12 +237,8 @@ function saveUser() {
         })
         .catch(error => {
             console.error('更新用户出错:', error);
+            hideLoading();
             showError('更新用户时发生错误: ' + (error.message || '未知错误'));
-        })
-        .finally(() => {
-            // 恢复按钮状态
-            saveUserBtn.textContent = originalText;
-            saveUserBtn.disabled = false;
         });
 }
 
@@ -253,11 +252,25 @@ function deleteUser(phone) {
         confirmButtonColor: '#dc3545',
         cancelButtonColor: '#6c757d',
         confirmButtonText: '确认删除',
-        cancelButtonText: '取消'
+        cancelButtonText: '取消',
+        background: '#f8f9fa',
+        customClass: {
+            title: 'text-warning',
+            confirmButton: 'btn btn-danger px-4',
+            cancelButton: 'btn btn-secondary px-4',
+            popup: 'swal-custom-popup'
+        },
+        showClass: {
+            popup: 'swal2-show-custom',
+            backdrop: 'swal2-backdrop-show',
+            icon: 'swal2-icon-show'
+        }
     }).then((result) => {
         if (result.isConfirmed) {
+            showLoading('删除用户');
             axios.delete(`/api/users/${phone}`)
                 .then(response => {
+                    hideLoading();
                     if (response.data.status) {
                         // 刷新用户列表
                         loadUsers();
@@ -269,6 +282,7 @@ function deleteUser(phone) {
                 })
                 .catch(error => {
                     console.error('删除用户出错:', error);
+                    hideLoading();
                     showError('删除用户时发生错误: ' + (error.message || '未知错误'));
                 });
         }
@@ -285,26 +299,29 @@ function signUser(phone) {
         confirmButtonColor: '#28a745',
         cancelButtonColor: '#6c757d',
         confirmButtonText: '确认签到',
-        cancelButtonText: '取消'
+        cancelButtonText: '取消',
+        background: '#f8f9fa',
+        customClass: {
+            title: 'text-info',
+            confirmButton: 'btn btn-success px-4',
+            cancelButton: 'btn btn-secondary px-4',
+            popup: 'swal-custom-popup'
+        },
+        showClass: {
+            popup: 'swal2-show-custom'
+        }
     }).then((result) => {
         if (result.isConfirmed) {
             // 获取签到设置
             const useRandomOffset = document.getElementById('useRandomOffset').checked;
             
             // 显示加载状态
-            Swal.fire({
-                title: '签到中',
-                text: '正在执行签到操作，请稍候...',
-                allowOutsideClick: false,
-                didOpen: () => {
-                    Swal.showLoading();
-                }
-            });
+            showLoading('执行签到');
             
             axios.post(`/api/sign/${phone}`, { location_random_offset: useRandomOffset })
                 .then(response => {
+                    hideLoading();
                     if (response.data.status) {
-                        Swal.close();
                         showSuccess(`用户 ${phone} 签到成功`);
                     } else {
                         showError(`用户 ${phone} 签到失败: ${response.data.message}`);
@@ -312,6 +329,7 @@ function signUser(phone) {
                 })
                 .catch(error => {
                     console.error('签到出错:', error);
+                    hideLoading();
                     showError('签到时发生错误: ' + (error.message || '未知错误'));
                 });
         }
@@ -322,29 +340,30 @@ function signUser(phone) {
 function batchSign() {
     console.log('批量签到按钮被点击');
     
-    // 检查SweetAlert2是否可用
-    if (typeof Swal !== 'undefined') {
-        console.log('使用SweetAlert2弹窗');
-        Swal.fire({
-            title: '批量签到',
-            text: '确认要为所有用户执行批量签到吗？',
-            icon: 'question',
-            showCancelButton: true,
-            confirmButtonColor: '#28a745',
-            cancelButtonColor: '#6c757d',
-            confirmButtonText: '确认签到',
-            cancelButtonText: '取消'
-        }).then((result) => {
-            if (result.isConfirmed) {
-                executeBatchSign();
-            }
-        });
-    } else {
-        console.log('SweetAlert2未加载，使用原生confirm');
-        if (confirm('确认要为所有用户执行批量签到吗？')) {
+    Swal.fire({
+        title: '批量签到',
+        text: '确认要为所有用户执行批量签到吗？',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#28a745',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: '确认签到',
+        cancelButtonText: '取消',
+        background: '#f8f9fa',
+        customClass: {
+            title: 'text-info',
+            confirmButton: 'btn btn-success px-4',
+            cancelButton: 'btn btn-secondary px-4',
+            popup: 'swal-custom-popup'
+        },
+        showClass: {
+            popup: 'swal2-show-custom'
+        }
+    }).then((result) => {
+        if (result.isConfirmed) {
             executeBatchSign();
         }
-    }
+    });
 }
 
 // 执行批量签到逻辑
@@ -357,14 +376,11 @@ function executeBatchSign() {
     console.log('签到设置:', {excludeInactive, useRandomOffset});
     
     // 显示加载状态
-    const batchSignBtn = document.getElementById('batchSignBtn');
-    const originalText = batchSignBtn.textContent;
-    batchSignBtn.textContent = '签到中...';
-    batchSignBtn.disabled = true;
+    showLoading('批量签到中');
     
     // 清空结果区域
     const resultDiv = document.getElementById('batchSignResult');
-    resultDiv.innerHTML = '<div class="alert alert-info">正在执行批量签到，请稍候...</div>';
+    resultDiv.innerHTML = '';
     
     // 签到请求
     console.log('发送批量签到请求');
@@ -374,6 +390,7 @@ function executeBatchSign() {
     })
         .then(response => {
             console.log('批量签到响应:', response.data);
+            hideLoading();
             if (response.data.status) {
                 // 显示签到结果
                 showBatchSignResults(response.data.results);
@@ -383,13 +400,8 @@ function executeBatchSign() {
         })
         .catch(error => {
             console.error('批量签到出错:', error);
+            hideLoading();
             showError('批量签到时发生错误: ' + (error.message || '未知错误'));
-        })
-        .finally(() => {
-            console.log('批量签到请求完成');
-            // 恢复按钮状态
-            batchSignBtn.textContent = originalText;
-            batchSignBtn.disabled = false;
         });
 }
 
@@ -541,13 +553,11 @@ function addLocationPreset() {
     }
     
     // 显示加载状态
-    const addLocationBtn = document.getElementById('addLocationBtn');
-    const originalText = addLocationBtn.textContent;
-    addLocationBtn.textContent = '添加中...';
-    addLocationBtn.disabled = true;
+    showLoading('添加位置预设');
     
     axios.post(`/api/location/presets/${phone}`, { address, lon, lat })
         .then(response => {
+            hideLoading();
             if (response.data.status) {
                 // 重置表单并关闭模态框
                 document.getElementById('addLocationForm').reset();
@@ -563,12 +573,8 @@ function addLocationPreset() {
         })
         .catch(error => {
             console.error('添加位置预设出错:', error);
+            hideLoading();
             showError('添加位置预设时发生错误: ' + (error.message || '未知错误'));
-        })
-        .finally(() => {
-            // 恢复按钮状态
-            addLocationBtn.textContent = originalText;
-            addLocationBtn.disabled = false;
         });
 }
 
@@ -582,25 +588,27 @@ function deletePreset(phone, index) {
         confirmButtonColor: '#dc3545',
         cancelButtonColor: '#6c757d',
         confirmButtonText: '确认删除',
-        cancelButtonText: '取消'
+        cancelButtonText: '取消',
+        background: '#f8f9fa',
+        customClass: {
+            title: 'text-warning',
+            confirmButton: 'btn btn-danger px-4',
+            cancelButton: 'btn btn-secondary px-4',
+            popup: 'swal-custom-popup'
+        },
+        showClass: {
+            popup: 'swal2-show-custom'
+        }
     }).then((result) => {
         if (result.isConfirmed) {
             // 显示加载状态
-            Swal.fire({
-                title: '删除中',
-                text: '正在删除位置预设，请稍候...',
-                allowOutsideClick: false,
-                didOpen: () => {
-                    Swal.showLoading();
-                }
-            });
+            showLoading('删除位置预设');
             
             // 调用删除API
             axios.delete(`/api/location/presets/${phone}/${index}`)
                 .then(response => {
+                    hideLoading();
                     if (response.data.status) {
-                        Swal.close();
-                        
                         // 刷新位置预设
                         loadLocationPresets();
                         
@@ -611,6 +619,7 @@ function deletePreset(phone, index) {
                 })
                 .catch(error => {
                     console.error('删除位置预设出错:', error);
+                    hideLoading();
                     showError('删除位置预设时发生错误: ' + (error.message || '未知错误'));
                 });
         }
@@ -692,10 +701,7 @@ function saveBatchLocation() {
     }
     
     // 显示加载状态
-    const saveBtn = document.getElementById('saveBatchLocationBtn');
-    const originalText = saveBtn.textContent;
-    saveBtn.textContent = '保存中...';
-    saveBtn.disabled = true;
+    showLoading('批量设置位置');
     
     // 批量设置位置
     const promises = selectedUsers.map(phone => 
@@ -704,6 +710,7 @@ function saveBatchLocation() {
     
     Promise.all(promises)
         .then(results => {
+            hideLoading();
             const success = results.filter(r => r.data.status).length;
             const total = results.length;
             
@@ -718,12 +725,8 @@ function saveBatchLocation() {
         })
         .catch(error => {
             console.error('批量设置位置出错:', error);
+            hideLoading();
             showError('批量设置位置时发生错误: ' + (error.message || '未知错误'));
-        })
-        .finally(() => {
-            // 恢复按钮状态
-            saveBtn.textContent = originalText;
-            saveBtn.disabled = false;
         });
 }
 
@@ -772,49 +775,148 @@ function toggleUserActive(phone, isActive) {
 
 // 辅助函数：显示加载中
 function showLoading(text = '加载中') {
-    // 可以在这里实现加载效果，例如显示一个加载指示器
-    console.log(`${text}...`);
+    Swal.fire({
+        title: text,
+        text: '请稍候...',
+        allowOutsideClick: false,
+        didOpen: () => {
+            Swal.showLoading();
+        },
+        background: '#f8f9fa',
+        customClass: {
+            title: 'text-primary',
+            popup: 'swal-custom-popup'
+        }
+    });
 }
 
 // 辅助函数：隐藏加载中
 function hideLoading() {
-    // 隐藏加载指示器
+    Swal.close();
 }
 
 // 辅助函数：显示成功消息
 function showSuccess(message) {
-    // 检查Toastify是否可用
-    if (typeof Toastify !== 'undefined') {
-        // 使用Toastify显示轻量级成功提示
-        Toastify({
-            text: message,
-            duration: 3000,
-            gravity: "top",
-            position: "right",
-            style: {
-                background: "linear-gradient(to right, #00b09b, #96c93d)",
-            },
-            onClick: function(){} // 点击关闭
-        }).showToast();
-    } else {
-        // 降级为原生alert
-        alert(message);
-    }
+    Toastify({
+        text: message,
+        duration: 3000,
+        gravity: "top",
+        position: "right",
+        style: {
+            background: "linear-gradient(to right, #00b09b, #96c93d)",
+            borderRadius: "8px",
+            fontSize: "15px",
+            padding: "12px 20px"
+        },
+        onClick: function(){}, // 点击关闭
+        stopOnFocus: true,
+        close: true,
+        className: "toastify-custom"
+    }).showToast();
 }
 
 // 辅助函数：显示错误消息
 function showError(message) {
-    // 检查SweetAlert2是否可用
-    if (typeof Swal !== 'undefined') {
-        // 使用SweetAlert2显示错误提示
-        Swal.fire({
-            icon: 'error',
-            title: '操作失败',
-            text: message,
-            confirmButtonColor: '#dc3545'
-        });
-    } else {
-        // 降级为原生alert
-        alert('错误: ' + message);
-    }
-} 
+    Swal.fire({
+        icon: 'error',
+        title: '操作失败',
+        text: message,
+        confirmButtonColor: '#dc3545',
+        background: '#f8f9fa',
+        customClass: {
+            title: 'text-danger',
+            confirmButton: 'btn btn-danger px-4',
+            popup: 'swal-custom-popup'
+        },
+        showClass: {
+            popup: 'swal2-show-custom',
+            backdrop: 'swal2-backdrop-show',
+            icon: 'swal2-icon-show'
+        },
+        hideClass: {
+            popup: 'swal2-hide',
+            backdrop: 'swal2-backdrop-hide',
+            icon: 'swal2-icon-hide'
+        }
+    });
+}
+
+// 渲染用户表格
+function renderUserTable(users) {
+    const tableBody = $('#userTable tbody');
+    tableBody.empty();
+    
+    // 使用模板
+    const actionTemplate = document.getElementById('userActionsTemplate');
+    const statusTemplate = document.getElementById('userStatusTemplate');
+    
+    users.forEach((user, index) => {
+        const row = $('<tr>');
+        
+        // ID列
+        row.append($('<td>').text(index + 1));
+        
+        // 用户名列
+        row.append($('<td>').text(user.username || '未知用户'));
+        
+        // 手机号列
+        row.append($('<td>').text(user.phone));
+        
+        // 状态列 - 使用模板
+        const statusCell = $('<td>');
+        const statusBadge = $(statusTemplate.content.cloneNode(true)).find('.status-badge');
+        
+        if (user.active) {
+            statusBadge.addClass('active').text('已激活');
+        } else {
+            statusBadge.addClass('inactive').text('未激活');
+        }
+        
+        statusCell.append(statusBadge);
+        row.append(statusCell);
+        
+        // 操作列 - 使用模板
+        const actionCell = $('<td>');
+        const actionButtons = $(actionTemplate.content.cloneNode(true));
+        
+        // 为按钮添加数据属性
+        actionButtons.find('.edit-user').attr('data-phone', user.phone);
+        actionButtons.find('.toggle-active').attr('data-phone', user.phone).attr('data-active', user.active);
+        actionButtons.find('.delete-user').attr('data-phone', user.phone);
+        actionButtons.find('.sign-user').attr('data-phone', user.phone);
+        
+        // 根据激活状态更改切换按钮样式
+        if (!user.active) {
+            actionButtons.find('.toggle-active')
+                .removeClass('btn-warning')
+                .addClass('btn-secondary');
+        }
+        
+        actionCell.append(actionButtons);
+        row.append(actionCell);
+        
+        tableBody.append(row);
+    });
+    
+    // 绑定操作按钮事件
+    $('#userTable .edit-user').click(function() {
+        const phone = $(this).data('phone');
+        openEditUserModal(phone);
+    });
+    
+    $('#userTable .toggle-active').click(function() {
+        const phone = $(this).data('phone');
+        const currentActive = $(this).data('active');
+        toggleUserActive(phone, !currentActive);
+    });
+    
+    $('#userTable .delete-user').click(function() {
+        const phone = $(this).data('phone');
+        deleteUser(phone);
+    });
+    
+    $('#userTable .sign-user').click(function() {
+        const phone = $(this).data('phone');
+        signUser(phone);
+    });
+}

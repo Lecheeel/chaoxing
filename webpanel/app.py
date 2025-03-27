@@ -79,29 +79,53 @@ def update_user(phone):
     # 获取当前用户信息
     user_data = get_json_object('configs/storage.json')
     
-    # 查找并更新用户
+    # 查找用户
     found = False
+    user_index = -1
     for i, user in enumerate(user_data.get('users', [])):
         if user.get('phone') == phone:
-            # 更新用户信息
-            for key, value in data.items():
-                # 不更新敏感字段
-                if key not in ['params', 'password']:
-                    user_data['users'][i][key] = value
-            
-            # 如果提供了密码，则重新登录获取新cookie
-            if 'password' in data and data['password']:
-                result = sign_by_login(phone, data['password'])
-                if not result['status']:
-                    return jsonify({"status": False, "message": f"用户密码更新失败: {result['message']}"})
-            
-            # 保存更新后的数据
-            store_user(phone, user_data['users'][i])
+            user_index = i
             found = True
             break
     
     if not found:
         return jsonify({"status": False, "message": f"未找到手机号为 {phone} 的用户"})
+    
+    # 如果提供了新手机号且与原手机号不同
+    new_phone = data.get('phone')
+    if new_phone and new_phone != phone:
+        # 检查新手机号是否已存在
+        for user in user_data.get('users', []):
+            if user.get('phone') == new_phone:
+                return jsonify({"status": False, "message": f"手机号 {new_phone} 已存在"})
+        
+        # 更新手机号
+        user_data['users'][user_index]['phone'] = new_phone
+    
+    # 更新其他信息
+    for key, value in data.items():
+        # 不重复更新手机号，也不更新敏感字段
+        if key not in ['phone', 'params']:
+            user_data['users'][user_index][key] = value
+    
+    # 如果提供了密码，则重新登录获取新cookie
+    if 'password' in data and data['password']:
+        result = user_login(new_phone or phone, data['password'])
+        if isinstance(result, str):  # 登录失败
+            return jsonify({"status": False, "message": f"用户密码更新失败: {result}"})
+        
+        # 更新登录参数
+        user_data['users'][user_index]['params'] = result
+    
+    # 保存更新后的数据
+    target_phone = new_phone if new_phone else phone
+    
+    # 如果更改了手机号，需要删除旧记录并创建新记录
+    if new_phone and new_phone != phone:
+        delete_user(phone)  # 删除旧记录
+    
+    # 保存更新后的用户信息
+    store_user(target_phone, user_data['users'][user_index])
     
     return jsonify({"status": True, "message": "用户信息更新成功"})
 
