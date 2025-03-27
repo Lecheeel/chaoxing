@@ -3,8 +3,9 @@ import re
 import time
 
 from configs.api import ACTIVELIST, ANALYSIS, ANALYSIS2, CHAT_GROUP, PPTACTIVEINFO, PRESIGN
-from utils.request import request, cookie_serialize
+from utils.request import request, cookie_serialize, request_manager
 from utils.helper import delay
+from utils.debug import is_debug_mode, debug_print
 
 def traverse_course_activity(args):
     """
@@ -54,11 +55,19 @@ def get_activity(course, **cookies):
         dict/str: 签到活动信息或错误信息
     """
     url = f"{ACTIVELIST['URL']}?fid=0&courseId={course['courseId']}&classId={course['classId']}&_={int(time.time() * 1000)}"
-    result = request(
+    
+    # 设置临时cookies
+    if cookies:
+        request_manager.set_cookies(cookies)
+    
+    if is_debug_mode():
+        debug_print(f"正在检查课程 {course.get('courseName', '未知课程')} 的签到活动", "blue")
+        
+    result = request_manager.request(
         url,
         {
             'headers': {
-                'Cookie': cookie_serialize(cookies),
+                'Referer': 'https://mooc1-1.chaoxing.com/visit/interaction',
             },
         }
     )
@@ -77,6 +86,8 @@ def get_activity(course, **cookies):
                     start_time = active_list[0].get('startTime', 0)
                     if (time.time() * 1000 - start_time) / 1000 < 7200:
                         print(f"检测到活动：{active_list[0].get('nameOne', '未知活动')}")
+                        if is_debug_mode():
+                            debug_print(f"活动详情: ID={active_list[0].get('id')}, 类型={other_id}, 状态={active_list[0].get('status')}", "green")
                         return {
                             'activeId': active_list[0].get('id'),
                             'name': active_list[0].get('nameOne'),
@@ -86,9 +97,13 @@ def get_activity(course, **cookies):
                         }
         else:
             print('请求似乎有些频繁，获取数据为空!')
+            if is_debug_mode():
+                debug_print("获取活动列表失败，返回数据为空", "red")
             return 'Too Frequent'
     except Exception as e:
         print(f"解析活动数据出错: {e}")
+        if is_debug_mode():
+            debug_print(f"解析活动数据出错: {e}", "red")
     
     # 此课程最新活动并非有效签到
     raise Exception('Not Available')
@@ -105,12 +120,15 @@ def get_ppt_active_info(active_id, **cookies):
         dict: 签到信息
     """
     url = f"{PPTACTIVEINFO['URL']}?activeId={active_id}"
-    result = request(
+    
+    # 设置临时cookies
+    if cookies:
+        request_manager.set_cookies(cookies)
+        
+    result = request_manager.request(
         url,
         {
-            'headers': {
-                'Cookie': cookie_serialize(cookies),
-            },
+            'scenario': 'activity',
         }
     )
     
@@ -128,30 +146,41 @@ def pre_sign(args):
     course_id = args.get('courseId')
     _uid = args.get('_uid')
     
-    cookies = {k: v for k, v in args.items() if k not in ['activeId', 'classId', 'courseId']}
+    if is_debug_mode():
+        debug_print(f"开始执行预签到: activeId={active_id}, courseId={course_id}, classId={class_id}", "blue")
+    
+    # 从args提取认证信息并设置
+    auth_info = {k: v for k, v in args.items() if k not in ['activeId', 'classId', 'courseId']}
+    request_manager.set_cookies(auth_info)
     
     # 预签到
     url = f"{PRESIGN['URL']}?courseId={course_id}&classId={class_id}&activePrimaryId={active_id}&general=1&sys=1&ls=1&appType=15&&tid=&uid={_uid}&ut=s"
-    request(
+    result = request_manager.request(
         url,
         {
             'headers': {
-                'Cookie': cookie_serialize(cookies),
+                'Referer': 'https://mobilelearn.chaoxing.com/',
             },
         }
     )
     print('[预签]已请求')
     
+    if is_debug_mode():
+        debug_print(f"预签到响应状态: {result['statusCode']}", "green")
+    
     # analysis
     analysis_url = f"{ANALYSIS['URL']}?vs=1&DB_STRATEGY=RANDOM&aid={active_id}"
-    analysis_result = request(
+    analysis_result = request_manager.request(
         analysis_url,
         {
             'headers': {
-                'Cookie': cookie_serialize(cookies),
+                'Referer': 'https://mobilelearn.chaoxing.com/',
             },
         }
     )
+    
+    if is_debug_mode():
+        debug_print(f"Analysis请求状态: {analysis_result['statusCode']}", "green")
     
     code_data = analysis_result['data']
     code_match = re.search(r"code=\'\+(\'.*?\')", code_data)
@@ -160,86 +189,36 @@ def pre_sign(args):
         
         # analysis2
         analysis2_url = f"{ANALYSIS2['URL']}?DB_STRATEGY=RANDOM&code={code}"
-        analysis2_result = request(
+        analysis2_result = request_manager.request(
             analysis2_url,
             {
                 'headers': {
-                    'Cookie': cookie_serialize(cookies),
+                    'Referer': 'https://mobilelearn.chaoxing.com/',
                 },
             }
         )
         print(f"analysis 请求结果：{analysis2_result['data']}")
+        
+        if is_debug_mode():
+            debug_print(f"Analysis2请求状态: {analysis2_result['statusCode']}", "green")
     
-    # 延迟500ms
-    delay(0.5)
 
-def speculate_type(text):
+def handle_activity_sign(params, activity, configs, name, location_preset_item=None, location_address_info=None, location_random_offset=True):
     """
-    推测签到类型
+    根据活动类型处理签到
     
     Args:
-        text: 活动名称
+        params: 用户参数
+        activity: 活动信息
+        configs: 配置信息
+        name: 用户名
+        location_preset_item: 位置签到的预设位置索引，None表示自动选择
+        location_address_info: 位置签到的自定义位置信息
+        location_random_offset: 位置签到时是否随机偏移坐标，默认为True
     
     Returns:
-        str: 签到类型
+        tuple: (签到结果, 更新后的配置)
     """
-    if '拍照' in text:
-        return 'photo'
-    elif '位置' in text:
-        return 'location'
-    elif '二维码' in text:
-        return 'qr'
-    # 普通、手势
-    return 'general'
-
-def get_sign_type(ppt_active_info):
-    """
-    解析签到类型
-    
-    Args:
-        ppt_active_info: getPPTActiveInfo的返回对象
-    
-    Returns:
-        str: 签到类型描述
-    """
-    other_id = ppt_active_info.get('otherId')
-    if other_id == 0:
-        if ppt_active_info.get('ifphoto') == 1:
-            return '拍照签到'
-        else:
-            return '普通签到'
-    elif other_id == 2:
-        return '二维码签到'
-    elif other_id == 3:
-        return '手势签到'
-    elif other_id == 4:
-        return '位置签到'
-    elif other_id == 5:
-        return '签到码签到'
-    else:
-        return '未知'
-
-def get_sign_result(result):
-    """
-    解析签到结果
-    
-    Args:
-        result: 签到结果
-    
-    Returns:
-        str: 具体的中文结果
-    """
-    if result == 'success':
-        return '成功'
-    elif result == 'fail':
-        return '失败'
-    elif result == 'fail-need-qrcode':
-        return '请发送二维码'
-    else:
-        return result
-
-def handle_activity_sign(params, activity, configs, name):
-    """根据活动类型处理签到"""
     import sys
     from functions.general import handle_general_sign, handle_gesture_sign, handle_code_sign
     from functions.qrcode import handle_qrcode_sign
@@ -252,13 +231,16 @@ def handle_activity_sign(params, activity, configs, name):
     # 根据签到类型调用相应的处理函数
     other_id = activity['otherId']
     
+    if is_debug_mode():
+        debug_print(f"处理签到活动: 类型ID={other_id}, 活动ID={activity['activeId']}, 用户={name}", "blue")
+    
     if other_id == 2:
         # 二维码签到
         return handle_qrcode_sign(params, activity, configs, name), configs
     
     elif other_id == 4:
         # 位置签到
-        return handle_location_sign(params, activity, configs, name)
+        return handle_location_sign(params, activity, configs, name, location_preset_item, location_address_info, location_random_offset)
     
     elif other_id == 3:
         # 手势签到
@@ -271,6 +253,9 @@ def handle_activity_sign(params, activity, configs, name):
     elif other_id == 0:
         # 获取签到详情
         photo = get_ppt_active_info(activity['activeId'], **params)
+        
+        if is_debug_mode():
+            debug_print(f"获取签到详情: ifphoto={photo.get('ifphoto')}", "green")
         
         if photo.get('ifphoto') == 1:
             # 拍照签到

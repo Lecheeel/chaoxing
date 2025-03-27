@@ -123,4 +123,90 @@ def get_stored_user(phone):
         if user.get('phone') == phone:
             return user.copy()
     
-    return None 
+    return None
+
+def save_user_cookies(phone, cookies, auth_info=None):
+    """
+    保存用户的cookies到storage.json
+    
+    Args:
+        phone: 手机号
+        cookies: 要保存的cookie字典
+        auth_info: 认证信息(可选)
+    
+    Returns:
+        bool: 是否保存成功
+    """
+    try:
+        user = get_stored_user(phone)
+        if not user:
+            user = {"phone": phone, "username": "未知用户"}
+        
+        # 保存cookies
+        user['cookies'] = cookies
+        
+        # 如果提供了认证信息，也保存
+        if auth_info:
+            user['auth_info'] = auth_info
+        
+        store_user(phone, user)
+        return True
+    except Exception as e:
+        print(f"保存用户cookies失败: {e}")
+        return False
+
+def get_user_cookies(phone):
+    """
+    获取用户存储的cookies
+    
+    Args:
+        phone: 手机号
+    
+    Returns:
+        dict: 用户cookies，如果不存在则返回空字典
+    """
+    user = get_stored_user(phone)
+    if user and 'cookies' in user:
+        return user['cookies']
+    return {}
+
+def get_all_users():
+    """
+    获取所有存储的用户信息
+    
+    Returns:
+        list: 所有用户信息的列表
+    """
+    data = get_json_object('configs/storage.json')
+    return data.get('users', [])
+
+def delete_user(phone):
+    """
+    删除指定手机号的用户
+    
+    Args:
+        phone: 手机号
+    
+    Returns:
+        bool: 是否删除成功
+    """
+    try:
+        data = get_json_object('configs/storage.json')
+        
+        # 查找并移除用户
+        for i, user in enumerate(data.get('users', [])):
+            if user.get('phone') == phone:
+                data['users'].pop(i)
+                break
+        
+        # 写入文件
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        file_path = os.path.join(base_dir, 'configs/storage.json')
+        
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False)
+        
+        return True
+    except Exception as e:
+        print(f"删除用户失败: {e}")
+        return False 

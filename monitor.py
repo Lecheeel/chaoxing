@@ -3,7 +3,7 @@ import sys
 import time
 import getpass
 
-from .functions.activity import get_ppt_active_info, pre_sign, traverse_course_activity, get_sign_type
+from .functions.activity import get_ppt_active_info, pre_sign, traverse_course_activity
 from .functions.general import general_sign
 from .functions.location import location_sign
 from .functions.photo import photo_sign, get_object_id_from_cx_pan
