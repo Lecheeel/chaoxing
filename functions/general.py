@@ -91,10 +91,92 @@ def handle_gesture_sign(params, activity, name):
     """处理手势签到"""
     if is_debug_mode():
         debug_print(f"处理手势签到: 用户={name}", "blue")
-    return handle_general_sign(params, activity, name)
+    
+    sign_code = params.get('signCode', '')
+    active_id = activity.get('activeId', '')
+    
+    if not sign_code:
+        if is_debug_mode():
+            debug_print("手势签到失败: 没有提供手势码", "red")
+        return "[手势]签到失败：未提供手势码"
+    
+    # 验证手势码
+    cookies = {k: v for k, v in params.items() if k not in ['name', 'activeId']}
+    
+    # 设置临时cookies
+    if cookies:
+        request_manager.set_cookies(cookies)
+    
+    # 验证签到码
+    check_url = f"https://mobilelearn.chaoxing.com/widget/sign/pcStuSignController/checkSignCode?activeId={active_id}&signCode={sign_code}"
+    check_result = request_manager.request(
+        check_url,
+        {
+            'scenario': 'activity',
+        }
+    )
+    
+    # 检查验证结果
+    if check_result.get('result') != 1:
+        error_msg = check_result.get('errorMsg', '手势码验证失败')
+        if is_debug_mode():
+            debug_print(f"手势签到失败: {error_msg}", "red")
+        return f"[手势]{error_msg}"
+    
+    # 验证通过，执行签到
+    sign_args = {
+        **params,
+        'activeId': active_id,
+        'name': name,
+        'fid': params.get('fid', '-1'),
+        'signCode': sign_code
+    }
+    
+    return general_sign(sign_args)
 
 def handle_code_sign(params, activity, name):
     """处理签到码签到"""
     if is_debug_mode():
         debug_print(f"处理签到码签到: 用户={name}", "blue")
-    return handle_general_sign(params, activity, name) 
+    
+    sign_code = params.get('signCode', '')
+    active_id = activity.get('activeId', '')
+    
+    if not sign_code:
+        if is_debug_mode():
+            debug_print("签到码签到失败: 没有提供签到码", "red")
+        return "[签到码]签到失败：未提供签到码"
+    
+    # 验证签到码
+    cookies = {k: v for k, v in params.items() if k not in ['name', 'activeId']}
+    
+    # 设置临时cookies
+    if cookies:
+        request_manager.set_cookies(cookies)
+    
+    # 验证签到码
+    check_url = f"https://mobilelearn.chaoxing.com/widget/sign/pcStuSignController/checkSignCode?activeId={active_id}&signCode={sign_code}"
+    check_result = request_manager.request(
+        check_url,
+        {
+            'scenario': 'activity',
+        }
+    )
+    
+    # 检查验证结果
+    if check_result.get('result') != 1:
+        error_msg = check_result.get('errorMsg', '签到码验证失败')
+        if is_debug_mode():
+            debug_print(f"签到码签到失败: {error_msg}", "red")
+        return f"[签到码]{error_msg}"
+    
+    # 验证通过，执行签到
+    sign_args = {
+        **params,
+        'activeId': active_id,
+        'name': name,
+        'fid': params.get('fid', '-1'),
+        'signCode': sign_code
+    }
+    
+    return general_sign(sign_args) 

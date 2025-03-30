@@ -4,7 +4,7 @@ import time
 import getpass
 
 from functions.activity import get_ppt_active_info, pre_sign, traverse_course_activity
-from functions.general import general_sign
+from functions.general import general_sign, handle_gesture_sign, handle_code_sign
 from functions.location import location_sign
 from functions.photo import photo_sign, get_object_id_from_cx_pan
 from functions.qrcode import qrcode_sign
@@ -185,23 +185,39 @@ def monitor_sign():
                 elif other_id == 3:
                     # 手势签到
                     colored_print("发现手势签到", "blue")
-                    result = general_sign({
-                        **params, 
-                        'activeId': activity['activeId'], 
-                        'name': name,
-                        'fid': params.get('fid', '-1')
-                    })
+                    sign_code = input("请输入手势签到码: ").strip()
+                    if not sign_code:
+                        colored_print("未提供手势码，无法完成签到", "red")
+                        continue
+                    
+                    # 将签到码添加到参数中
+                    sign_params = {
+                        **params,
+                        'signCode': sign_code
+                    }
+                    
+                    # 使用handle_gesture_sign进行手势签到
+                    result = handle_gesture_sign(sign_params, activity, name)
+                    colored_print(f"手势签到结果: {result}", "blue")
                 
                 
                 elif other_id == 5:
                     # 签到码签到
                     colored_print("发现签到码签到", "blue")
-                    result = general_sign({
-                        **params, 
-                        'activeId': activity['activeId'], 
-                        'name': name,
-                        'fid': params.get('fid', '-1')
-                    })
+                    sign_code = input("请输入签到码: ").strip()
+                    if not sign_code:
+                        colored_print("未提供签到码，无法完成签到", "red")
+                        continue
+                    
+                    # 将签到码添加到参数中
+                    sign_params = {
+                        **params,
+                        'signCode': sign_code
+                    }
+                    
+                    # 使用handle_code_sign进行签到码签到
+                    result = handle_code_sign(sign_params, activity, name)
+                    colored_print(f"签到码签到结果: {result}", "blue")
                     
                 
                 elif other_id == 0:
