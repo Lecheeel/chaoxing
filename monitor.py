@@ -3,14 +3,14 @@ import sys
 import time
 import getpass
 
-from .functions.activity import get_ppt_active_info, pre_sign, traverse_course_activity
-from .functions.general import general_sign
-from .functions.location import location_sign
-from .functions.photo import photo_sign, get_object_id_from_cx_pan
-from .functions.qrcode import qrcode_sign
-from .functions.user import get_account_info, get_courses, get_local_users, user_login
-from .utils.file import get_json_object, store_user
-from .utils.helper import colored_print, delay
+from functions.activity import get_ppt_active_info, pre_sign, traverse_course_activity
+from functions.general import general_sign
+from functions.location import location_sign
+from functions.photo import photo_sign, get_object_id_from_cx_pan
+from functions.qrcode import qrcode_sign
+from functions.user import get_account_info, get_courses, get_local_users, user_login
+from utils.file import get_json_object, store_user
+from utils.helper import colored_print, delay
 
 def monitor_sign():
     """监听签到主函数"""
