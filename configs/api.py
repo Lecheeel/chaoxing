@@ -74,4 +74,24 @@ CHAT_GROUP = {
         # 也存在是 POST 的情况
         "METHOD": "GET"
     }
+}
+
+# 手势签到相关API
+GESTURE_SIGN = {
+    "CHECK_SIGN_CODE": {
+        "URL": "https://mobilelearn.chaoxing.com/widget/sign/pcStuSignController/checkSignCode",
+        "METHOD": "POST"
+    },
+    "SIGN_IN": {
+        "URL": "https://mobilelearn.chaoxing.com/v2/apis/sign/signIn",
+        "METHOD": "GET"
+    }
+}
+
+# 签到码验证API
+CODE_SIGN = {
+    "CHECK_SIGN_CODE": {
+        "URL": "https://mobilelearn.chaoxing.com/widget/sign/pcStuSignController/checkSignCode",
+        "METHOD": "GET"
+    }
 } 

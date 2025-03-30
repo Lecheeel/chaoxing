@@ -1,6 +1,7 @@
-from configs.api import CHAT_GROUP, PPTSIGN
-from utils.request import request, cookie_serialize, request_manager
+from configs.api import CHAT_GROUP, PPTSIGN, CODE_SIGN
+from utils.request import request_manager
 from utils.debug import is_debug_mode, debug_print
+import json
 
 def general_sign(args):
     """
@@ -87,53 +88,6 @@ def handle_general_sign(params, activity, name):
         'fid': params.get('fid', '-1')
     })
 
-def handle_gesture_sign(params, activity, name):
-    """处理手势签到"""
-    if is_debug_mode():
-        debug_print(f"处理手势签到: 用户={name}", "blue")
-    
-    sign_code = params.get('signCode', '')
-    active_id = activity.get('activeId', '')
-    
-    if not sign_code:
-        if is_debug_mode():
-            debug_print("手势签到失败: 没有提供手势码", "red")
-        return "[手势]签到失败：未提供手势码"
-    
-    # 验证手势码
-    cookies = {k: v for k, v in params.items() if k not in ['name', 'activeId']}
-    
-    # 设置临时cookies
-    if cookies:
-        request_manager.set_cookies(cookies)
-    
-    # 验证签到码
-    check_url = f"https://mobilelearn.chaoxing.com/widget/sign/pcStuSignController/checkSignCode?activeId={active_id}&signCode={sign_code}"
-    check_result = request_manager.request(
-        check_url,
-        {
-            'scenario': 'activity',
-        }
-    )
-    
-    # 检查验证结果
-    if check_result.get('result') != 1:
-        error_msg = check_result.get('errorMsg', '手势码验证失败')
-        if is_debug_mode():
-            debug_print(f"手势签到失败: {error_msg}", "red")
-        return f"[手势]{error_msg}"
-    
-    # 验证通过，执行签到
-    sign_args = {
-        **params,
-        'activeId': active_id,
-        'name': name,
-        'fid': params.get('fid', '-1'),
-        'signCode': sign_code
-    }
-    
-    return general_sign(sign_args)
-
 def handle_code_sign(params, activity, name):
     """处理签到码签到"""
     if is_debug_mode():
@@ -148,14 +102,14 @@ def handle_code_sign(params, activity, name):
         return "[签到码]签到失败：未提供签到码"
     
     # 验证签到码
-    cookies = {k: v for k, v in params.items() if k not in ['name', 'activeId']}
+    cookies = {k: v for k, v in params.items() if k not in ['name', 'activeId', 'signCode']}
     
     # 设置临时cookies
     if cookies:
         request_manager.set_cookies(cookies)
     
     # 验证签到码
-    check_url = f"https://mobilelearn.chaoxing.com/widget/sign/pcStuSignController/checkSignCode?activeId={active_id}&signCode={sign_code}"
+    check_url = f"{CODE_SIGN['CHECK_SIGN_CODE']['URL']}?activeId={active_id}&signCode={sign_code}"
     check_result = request_manager.request(
         check_url,
         {
@@ -164,19 +118,32 @@ def handle_code_sign(params, activity, name):
     )
     
     # 检查验证结果
-    if check_result.get('result') != 1:
-        error_msg = check_result.get('errorMsg', '签到码验证失败')
+    try:
+        check_result_data = json.loads(check_result['data'])
+        if check_result_data.get('result') != 1:
+            error_msg = check_result_data.get('errorMsg', '签到码验证失败')
+            if is_debug_mode():
+                debug_print(f"签到码签到失败: {error_msg}", "red")
+            return f"[签到码]{error_msg}"
+    except json.JSONDecodeError:
         if is_debug_mode():
-            debug_print(f"签到码签到失败: {error_msg}", "red")
-        return f"[签到码]{error_msg}"
+            debug_print("签到码签到失败: 返回数据格式错误", "red")
+        return "[签到码]签到失败: 返回数据格式错误"
     
     # 验证通过，执行签到
-    sign_args = {
-        **params,
-        'activeId': active_id,
-        'name': name,
-        'fid': params.get('fid', '-1'),
-        'signCode': sign_code
-    }
+    url = f"{PPTSIGN['URL']}?activeId={active_id}&uid={cookies.get('_uid', '')}&clientip=&latitude=-1&longitude=-1&appType=15&fid={params.get('fid', '-1')}&name={name}&signCode={sign_code}"
+    result = request_manager.request(
+        url, 
+        {
+            'scenario': 'activity',
+        }
+    )
     
-    return general_sign(sign_args) 
+    msg = '[签到码]签到成功' if result['data'] == 'success' else f"[签到码]{result['data']}"
+    print(msg)
+    
+    if is_debug_mode():
+        debug_print(f"签到码签到结果: {result['data']}", "green" if result['data'] == 'success' else "red")
+    
+    return msg
+

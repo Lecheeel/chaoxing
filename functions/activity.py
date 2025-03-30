@@ -3,9 +3,13 @@ import re
 import time
 
 from configs.api import ACTIVELIST, ANALYSIS, ANALYSIS2, CHAT_GROUP, PPTACTIVEINFO, PRESIGN
-from utils.request import request, cookie_serialize, request_manager
-from utils.helper import delay
+from utils.request import request_manager
 from utils.debug import is_debug_mode, debug_print
+from functions.general import handle_general_sign, handle_code_sign
+from functions.gesture import handle_gesture_sign
+from functions.qrcode import handle_qrcode_sign
+from functions.location import handle_location_sign
+from functions.photo import handle_photo_sign
 
 def traverse_course_activity(args):
     """
@@ -220,10 +224,6 @@ def handle_activity_sign(params, activity, configs, name, location_preset_item=N
         tuple: (签到结果, 更新后的配置)
     """
     import sys
-    from functions.general import handle_general_sign, handle_gesture_sign, handle_code_sign
-    from functions.qrcode import handle_qrcode_sign
-    from functions.location import handle_location_sign
-    from functions.photo import handle_photo_sign
     
     # 预签到
     pre_sign({**activity, **params})
