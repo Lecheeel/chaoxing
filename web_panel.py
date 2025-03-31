@@ -4,7 +4,6 @@
 import os
 import sys
 from webpanel.app import app
-from schedule_task import initialize_scheduler
 
 if __name__ == "__main__":
     # 设置端口，默认为5000
@@ -17,11 +16,6 @@ if __name__ == "__main__":
     print("="*50)
     print(f"访问地址: http://127.0.0.1:{port}")
     print("使用Ctrl+C可以停止服务")
-    print("="*50)
-    
-    # 初始化定时任务调度器
-    initialize_scheduler()
-    print("定时任务调度器已启动")
     print("="*50)
     
     # 启动Flask应用

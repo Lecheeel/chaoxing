@@ -44,10 +44,9 @@ def setup_logging():
     return logger
 
 # 注册终止处理程序
-def register_exit_handlers(scheduler_stop_func):
+def register_exit_handlers():
     def exit_handler():
         logging.info("程序正在退出，清理资源...")
-        scheduler_stop_func()
         logging.info("资源清理完成，程序退出")
     
     def signal_handler(sig, frame):
@@ -64,13 +63,6 @@ def register_exit_handlers(scheduler_stop_func):
 
 def restart_flask_app():
     from webpanel.app import app
-    from schedule_task import stop_scheduler_thread, initialize_scheduler
-    
-    # 停止现有调度器
-    stop_scheduler_thread()
-    
-    # 重新初始化调度器
-    initialize_scheduler()
     
     # 重启Flask应用
     logging.info("正在重启Flask应用...")
@@ -89,14 +81,9 @@ def main():
         
         # 导入必要模块
         from webpanel.app import app
-        from schedule_task import initialize_scheduler, stop_scheduler_thread
         
         # 注册退出处理程序
-        register_exit_handlers(stop_scheduler_thread)
-        
-        # 初始化定时任务调度器
-        initialize_scheduler()
-        logging.info("定时任务调度器已启动")
+        register_exit_handlers()
         
         # 设置端口，默认为5000
         port = 5000
