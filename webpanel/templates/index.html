@@ -48,6 +48,11 @@
                             <i class="fas fa-clock me-1"></i>定时任务
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#monitor">
+                            <i class="fas fa-eye me-1"></i>监控管理
+                        </a>
+                    </li>
                 </ul>
             </div>
         </div>
@@ -249,6 +254,77 @@
                             </thead>
                             <tbody>
                                 <!-- 任务列表将通过JS动态加载 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 监控管理 -->
+        <div id="monitor" class="section mt-5">
+            <div class="card shadow-sm">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                    <h2><i class="fas fa-eye text-primary me-2"></i>监控管理</h2>
+                    <div>
+                        <button class="btn btn-info me-2" id="refreshMonitorsBtn" title="刷新监控状态">
+                            <i class="fas fa-sync-alt me-2"></i>刷新状态
+                        </button>
+                        <button class="btn btn-danger me-2" id="stopAllMonitorsBtn">
+                            <i class="fas fa-stop-circle me-2"></i>停止所有监控
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info d-flex align-items-center">
+                        <i class="fas fa-info-circle me-3 fs-4"></i>
+                        <div>监控功能会实时检测您所有课程的签到活动，并自动完成签到。</div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h5 class="card-title"><i class="fas fa-check-double text-success me-2"></i>支持的签到类型</h5>
+                                    <ul class="mb-0">
+                                        <li>普通签到</li>
+                                        <li>手势签到</li>
+                                        <li>位置签到（使用预设位置）</li>
+                                        <li>签到码签到</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h5 class="card-title"><i class="fas fa-exclamation-triangle text-warning me-2"></i>不支持的签到类型</h5>
+                                    <ul class="mb-0">
+                                        <li>二维码签到（需手动扫码）</li>
+                                        <li>拍照签到（需手动拍照）</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover" id="monitorTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>手机号</th>
+                                    <th>用户名</th>
+                                    <th>状态</th>
+                                    <th>启动时间</th>
+                                    <th>最后检查</th>
+                                    <th>最后签到</th>
+                                    <th>签到次数</th>
+                                    <th>错误次数</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- 监控列表将通过JS动态加载 -->
                             </tbody>
                         </table>
                     </div>
@@ -789,6 +865,71 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
                     <button type="button" class="btn btn-info text-white" id="updateScheduleBtn">更新任务</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 启动监控模态框 -->
+    <div class="modal fade" id="startMonitorModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title"><i class="fas fa-eye me-2"></i>启动监控</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info d-flex align-items-center mb-3">
+                        <i class="fas fa-info-circle me-3 fs-4"></i>
+                        <div>监控将持续检测课程签到活动，自动完成签到操作。</div>
+                    </div>
+                    
+                    <form id="startMonitorForm">
+                        <input type="hidden" id="monitorPhone">
+                        <div class="mb-3">
+                            <label for="monitorUsername" class="form-label">用户</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-user"></i></span>
+                                <input type="text" class="form-control" id="monitorUsername" readonly>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="monitorDelay" class="form-label">签到延迟(秒)</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-clock"></i></span>
+                                <input type="number" class="form-control" id="monitorDelay" min="0" value="0">
+                            </div>
+                            <small class="text-muted">设置发现签到后的等待时间，避免过早签到引起怀疑</small>
+                        </div>
+                        <div class="mb-3">
+                            <label for="monitorLocation" class="form-label">位置设置</label>
+                            <select class="form-select" id="monitorLocation">
+                                <option value="">-- 使用默认位置 --</option>
+                                <!-- 位置选项将通过JS动态加载 -->
+                            </select>
+                            <small class="text-muted">选择位置预设用于位置签到</small>
+                        </div>
+                        
+                        <div class="alert alert-warning d-flex align-items-center mt-4 mb-0">
+                            <i class="fas fa-exclamation-triangle me-3 fs-4"></i>
+                            <div>
+                                <p class="mb-1">请注意：</p>
+                                <ul class="mb-0">
+                                    <li>监控功能会在后台持续运行，会消耗一定系统资源</li>
+                                    <li>请勿关闭网页或浏览器，否则监控会停止</li>
+                                    <li>二维码签到和拍照签到无法自动完成</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-2"></i>取消
+                    </button>
+                    <button type="button" class="btn btn-primary" id="startMonitorBtn">
+                        <i class="fas fa-play me-2"></i>启动
+                    </button>
                 </div>
             </div>
         </div>
