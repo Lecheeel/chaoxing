@@ -264,4 +264,59 @@ def handle_activity_sign(params, activity, configs, name, location_preset_item=N
             # 普通签到
             return handle_general_sign(params, activity, name), configs
     
-    return "未知的签到类型", configs 
+    else:
+        # 普通签到
+        return handle_general_sign(params, activity, name), configs
+
+def check_sign_activity(user_info, course_id):
+    """
+    检查指定课程是否有签到活动，用于监听签到功能
+    
+    Args:
+        user_info: 用户信息，包含认证信息
+        course_id: 课程ID
+    
+    Returns:
+        bool: 是否存在签到活动
+    """
+    from utils.debug import is_debug_mode, debug_print
+    
+    # 提取用户参数
+    user_params = user_info.get('params', {})
+    if not user_params:
+        if is_debug_mode():
+            debug_print(f"用户 {user_info.get('phone')} 的参数为空", "red")
+        return False
+    
+    try:
+        # 获取该用户的课程列表
+        from functions.user import get_courses
+        
+        cookies = {k: v for k, v in user_params.items()}
+        courses = get_courses(cookies)
+        
+        # 过滤出指定的课程
+        target_course = None
+        for course in courses:
+            if str(course.get('courseId')) == str(course_id):
+                target_course = course
+                break
+        
+        if not target_course:
+            if is_debug_mode():
+                debug_print(f"未找到课程ID为 {course_id} 的课程", "yellow")
+            return False
+        
+        # 检查该课程是否有签到活动
+        activity = get_activity(course=target_course, **cookies)
+        
+        # 如果返回值是字典，说明有活动
+        if isinstance(activity, dict) and activity.get('activeId'):
+            if is_debug_mode():
+                debug_print(f"检测到课程 {target_course.get('courseName')} 有签到活动", "green")
+            return True
+    except Exception as e:
+        if is_debug_mode():
+            debug_print(f"检查签到活动时出错: {str(e)}", "red")
+    
+    return False 

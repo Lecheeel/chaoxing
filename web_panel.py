@@ -4,7 +4,7 @@
 import os
 import sys
 from webpanel.app import app
-from schedule_task import initialize_scheduler
+from utils.schedule_task import initialize_scheduler
 
 if __name__ == "__main__":
     # 设置端口，默认为5000

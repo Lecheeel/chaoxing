@@ -53,7 +53,7 @@ def main():
 def handle_specific_sign():
     """处理指定用户签到功能"""
     from utils.file import get_json_object
-    from sign_api import sign_by_index, sign_by_phone
+    from functions.sign import sign_by_index, sign_by_phone
     
     try:
         # 读取存储的用户

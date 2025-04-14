@@ -10,6 +10,15 @@ import atexit
 from logging.handlers import RotatingFileHandler
 import traceback
 
+from flask import Flask, jsonify
+from flask_cors import CORS
+import threading
+
+from webpanel.app import app as webpanel_app
+from functions.sign import sign_by_login
+from utils.schedule_task import initialize_scheduler, get_scheduler_status
+from utils.monitor import initialize_monitor
+
 # 配置日志
 def setup_logging():
     # 确保日志目录存在
@@ -64,7 +73,7 @@ def register_exit_handlers(scheduler_stop_func):
 
 def restart_flask_app():
     from webpanel.app import app
-    from schedule_task import stop_scheduler_thread, initialize_scheduler
+    from utils.schedule_task import stop_scheduler_thread, initialize_scheduler
     
     # 停止现有调度器
     stop_scheduler_thread()
@@ -78,9 +87,41 @@ def restart_flask_app():
     # 返回Flask应用实例
     return app
 
+def start_webpanel():
+    """启动Web面板"""
+    try:
+        print("正在启动Web面板...")
+        webpanel_app.run(host='0.0.0.0', port=5000, debug=True)
+    except Exception as e:
+        logger.error(f"启动Web面板时出错: {e}")
+
+def start_scheduler():
+    """启动定时任务"""
+    try:
+        print("正在初始化定时任务调度器...")
+        initialize_scheduler()
+        status = get_scheduler_status()
+        print(f"调度器状态: 运行={status['running']}, 健康={status['healthy']}, 任务数={status['tasks_count']}")
+    except Exception as e:
+        logger.error(f"启动定时任务时出错: {e}")
+
+def start_monitor():
+    """启动监听模块"""
+    try:
+        print("正在初始化签到监听模块...")
+        active_count = initialize_monitor()
+        print(f"监听模块初始化完成，已启动 {active_count} 个监听任务")
+    except Exception as e:
+        logger.error(f"启动监听模块时出错: {e}")
+
 def main():
     # 设置日志
     logger = setup_logging()
+    
+    # 设置端口，默认为5000
+    port = 5000
+    if len(sys.argv) > 1 and sys.argv[1].isdigit():
+        port = int(sys.argv[1])
     
     try:
         logging.info("=" * 50)
@@ -89,27 +130,19 @@ def main():
         
         # 导入必要模块
         from webpanel.app import app
-        from schedule_task import initialize_scheduler, stop_scheduler_thread
+        from utils.schedule_task import initialize_scheduler, stop_scheduler_thread
         
         # 注册退出处理程序
         register_exit_handlers(stop_scheduler_thread)
         
-        # 初始化定时任务调度器
-        initialize_scheduler()
-        logging.info("定时任务调度器已启动")
+        # 启动定时任务
+        start_scheduler()
         
-        # 设置端口，默认为5000
-        port = 5000
-        if len(sys.argv) > 1 and sys.argv[1].isdigit():
-            port = int(sys.argv[1])
+        # 启动监听模块
+        start_monitor()
         
-        # 打印访问信息
-        logging.info(f"访问地址: http://127.0.0.1:{port}")
-        logging.info("使用Ctrl+C可以停止服务")
-        logging.info("=" * 50)
-        
-        # 启动Flask应用 (生产环境模式)
-        app.run(debug=False, host='0.0.0.0', port=port, threaded=True)
+        # 启动Web面板
+        start_webpanel()
         
     except Exception as e:
         # 记录详细异常信息

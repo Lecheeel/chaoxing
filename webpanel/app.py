@@ -7,6 +7,7 @@ import logging
 import traceback
 import time
 from werkzeug.middleware.proxy_fix import ProxyFix
+import datetime
 
 # 添加项目根目录到系统路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -14,12 +15,17 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # 导入项目的功能模块
 from functions.user import user_login, get_account_info, get_local_users
 from functions.activity import handle_activity_sign
-from utils.file import get_json_object, store_user, delete_user, get_all_users
-from sign_api import sign_by_index, sign_by_phone, sign_by_login
+from utils.file import get_json_object, store_user, delete_user, get_all_users, get_stored_user
+from functions.sign import sign_by_index, sign_by_phone, sign_by_login
 # 导入定时任务管理模块
-from schedule_task import (
+from utils.schedule_task import (
     get_schedule_tasks, get_task, create_task,
     update_task, delete_task, execute_task
+)
+# 导入监听签到模块
+from utils.monitor import (
+    get_monitor_tasks, get_monitor_task, create_monitor_task,
+    update_monitor_task, delete_monitor_task, toggle_monitor_task
 )
 
 app = Flask(__name__)
@@ -112,18 +118,27 @@ def add_user():
     data = request.json
     
     if not data or 'phone' not in data or 'password' not in data:
+        app.logger.error("请求缺少必要参数: 手机号或密码")
         return jsonify({"status": False, "message": "请提供手机号和密码"})
     
+    app.logger.info(f"接收到添加用户请求，手机号: {data['phone']}")
+    
     # 使用user_login函数登录，而不是sign_by_login
+    app.logger.info(f"开始用户登录过程: {data['phone']}")
     result = user_login(data['phone'], data['password'])
     
     # 检查登录结果
     if isinstance(result, str):
+        app.logger.error(f"用户登录失败: {data['phone']}, 原因: {result}")
         return jsonify({"status": False, "message": f"登录失败: {result}"})
     
+    app.logger.info(f"用户登录成功: {data['phone']}")
+    
     # 获取用户名
+    app.logger.info(f"开始获取用户信息: {data['phone']}")
     user_params = {**result, 'phone': data['phone'], 'password': data['password']}
     user_name = get_account_info(user_params)
+    app.logger.info(f"获取到用户名: {user_name}")
     
     # 创建用户对象
     user_data = {
@@ -137,9 +152,30 @@ def add_user():
         user_data['username'] = user_name
     
     # 保存用户信息
-    store_user(data['phone'], user_data)
+    app.logger.info(f"开始保存用户信息到本地: {data['phone']}")
+    try:
+        users = store_user(data['phone'], user_data)
+        app.logger.info(f"用户信息保存完成，当前用户数量: {len(users)}")
+        
+        # 验证用户是否真的被添加了
+        storage_data = get_json_object('configs/storage.json')
+        found = False
+        for user in storage_data.get('users', []):
+            if user.get('phone') == data['phone']:
+                found = True
+                break
+        
+        if found:
+            app.logger.info(f"验证成功：用户 {data['phone']} 已存储到本地")
+        else:
+            app.logger.warning(f"验证失败：用户 {data['phone']} 未找到于本地存储中")
     
-    return jsonify({"status": True, "message": "用户添加成功"})
+        return jsonify({"status": True, "message": "用户添加成功"})
+    except Exception as e:
+        app.logger.error(f"保存用户信息时出错: {str(e)}")
+        import traceback
+        app.logger.error(traceback.format_exc())
+        return jsonify({"status": False, "message": f"保存用户信息失败: {str(e)}"})
 
 @app.route('/api/users/<phone>', methods=['DELETE'])
 @handle_errors
@@ -157,8 +193,11 @@ def update_user(phone):
     if not data:
         return jsonify({"status": False, "message": "请提供更新数据"})
     
+    app.logger.info(f"更新用户信息请求: 手机号={phone}, 数据={data}")
+    
     # 获取当前用户信息
     user_data = get_json_object('configs/storage.json')
+    app.logger.info(f"当前存储的用户数量: {len(user_data.get('users', []))}")
     
     # 查找用户
     found = False
@@ -167,9 +206,11 @@ def update_user(phone):
         if user.get('phone') == phone:
             user_index = i
             found = True
+            app.logger.info(f"找到用户: 索引={i}, 用户信息={user}")
             break
     
     if not found:
+        app.logger.error(f"未找到手机号为 {phone} 的用户")
         return jsonify({"status": False, "message": f"未找到手机号为 {phone} 的用户"})
     
     # 如果提供了新手机号且与原手机号不同
@@ -178,37 +219,131 @@ def update_user(phone):
         # 检查新手机号是否已存在
         for user in user_data.get('users', []):
             if user.get('phone') == new_phone:
+                app.logger.error(f"手机号 {new_phone} 已存在")
                 return jsonify({"status": False, "message": f"手机号 {new_phone} 已存在"})
         
         # 更新手机号
         user_data['users'][user_index]['phone'] = new_phone
+        app.logger.info(f"更新用户手机号: {phone} -> {new_phone}")
     
     # 更新其他信息
     for key, value in data.items():
         # 不重复更新手机号，也不更新敏感字段
         if key not in ['phone', 'params']:
+            old_value = user_data['users'][user_index].get(key)
             user_data['users'][user_index][key] = value
+            app.logger.info(f"更新用户字段: {key}, 旧值={old_value}, 新值={value}")
     
     # 如果提供了密码，则重新登录获取新cookie
     if 'password' in data and data['password']:
+        app.logger.info("检测到密码更新，正在重新登录获取新cookie")
         result = user_login(new_phone or phone, data['password'])
         if isinstance(result, str):  # 登录失败
+            app.logger.error(f"用户密码更新失败: {result}")
             return jsonify({"status": False, "message": f"用户密码更新失败: {result}"})
         
         # 更新登录参数
         user_data['users'][user_index]['params'] = result
+        app.logger.info("成功更新用户登录参数")
     
     # 保存更新后的数据
     target_phone = new_phone if new_phone else phone
     
     # 如果更改了手机号，需要删除旧记录并创建新记录
     if new_phone and new_phone != phone:
+        app.logger.info(f"手机号已更改，正在删除旧记录: {phone}")
         delete_user(phone)  # 删除旧记录
     
     # 保存更新后的用户信息
-    store_user(target_phone, user_data['users'][user_index])
+    app.logger.info(f"正在保存更新后的用户信息: {user_data['users'][user_index]}")
+    updated_users = store_user(target_phone, user_data['users'][user_index])
+    app.logger.info(f"保存成功，更新后的用户数量: {len(updated_users)}")
     
     return jsonify({"status": True, "message": "用户信息更新成功"})
+
+@app.route('/api/users/<phone>/update-cookie', methods=['POST'])
+@handle_errors
+def update_user_cookie(phone):
+    """更新指定用户的cookie"""
+    # 获取用户信息
+    user_data = get_json_object('configs/storage.json')
+    user = None
+    for u in user_data.get('users', []):
+        if u.get('phone') == phone:
+            user = u
+            break
+    
+    if not user:
+        return jsonify({"status": False, "message": f"未找到手机号为 {phone} 的用户"})
+    
+    # 检查是否有密码
+    if not user.get('password'):
+        return jsonify({"status": False, "message": "用户未设置密码，无法更新cookie"})
+    
+    # 重新登录获取新cookie
+    result = user_login(phone, user['password'])
+    if isinstance(result, str):  # 登录失败
+        return jsonify({"status": False, "message": f"更新cookie失败: {result}"})
+    
+    # 更新用户信息
+    user['params'] = result
+    
+    # 保存更新后的数据
+    store_user(phone, user)
+    
+    return jsonify({"status": True, "message": "Cookie更新成功"})
+
+@app.route('/api/users/update-all-cookies', methods=['POST'])
+@handle_errors
+def update_all_user_cookies():
+    """更新所有用户的cookie"""
+    # 获取所有用户信息
+    user_data = get_json_object('configs/storage.json')
+    results = []
+    
+    for user in user_data.get('users', []):
+        phone = user.get('phone')
+        if not phone or not user.get('password'):
+            results.append({
+                "phone": phone,
+                "status": False,
+                "message": "用户未设置密码，跳过更新"
+            })
+            continue
+        
+        # 重新登录获取新cookie
+        result = user_login(phone, user['password'])
+        if isinstance(result, str):  # 登录失败
+            results.append({
+                "phone": phone,
+                "status": False,
+                "message": f"更新cookie失败: {result}"
+            })
+            continue
+        
+        # 更新用户信息
+        user['params'] = result
+        store_user(phone, user)
+        results.append({
+            "phone": phone,
+            "status": True,
+            "message": "Cookie更新成功"
+        })
+    
+    # 检查是否有任何更新失败
+    failed_updates = [r for r in results if not r['status']]
+    if failed_updates:
+        return jsonify({
+            "status": False,
+            "message": "部分用户Cookie更新失败",
+            "results": results
+        })
+    
+    return jsonify({
+        "status": True,
+        "message": "所有用户Cookie更新成功",
+        "results": results
+    })
 
 @app.route('/api/sign/all', methods=['POST'])
 @handle_errors
@@ -222,10 +357,21 @@ def sign_all():
     results = []
     
     for user in users:
+        # 验证手机号格式
+        phone = user.get('phone')
+        if not phone or not isinstance(phone, str) or not phone.isdigit() or len(phone) != 11 or not phone.startswith('1'):
+            results.append({
+                "phone": phone or '未知',
+                "name": user.get('username', '未知用户'),
+                "status": False,
+                "message": f"手机号格式不正确: {phone}"
+            })
+            continue
+            
         # 如果设置排除未激活用户并且用户未激活，则跳过
         if exclude_inactive and not user.get('active', True):
             results.append({
-                "phone": user.get('phone'),
+                "phone": phone,
                 "name": user.get('username', '未知用户'),
                 "status": False,
                 "message": "用户未激活，已跳过"
@@ -237,16 +383,34 @@ def sign_all():
         location_address_info = data.get('location_address_info')
         location_random_offset = data.get('location_random_offset', True)
         
-        result = sign_by_phone(
-            user.get('phone'), 
-            location_preset_item, 
-            location_address_info, 
-            location_random_offset
-        )
+        # 检查是否需要传递位置信息，只有当用户没有自己的预设位置时才需要
+        user_has_location = False
+        # 检查用户是否有预设位置（检查两个可能的存储位置）
+        if 'presetAddress' in user and user['presetAddress']:
+            user_has_location = True
+        elif 'monitor' in user and 'presetAddress' in user['monitor'] and user['monitor']['presetAddress']:
+            user_has_location = True
+        
+        # 如果用户没有自己的预设位置，才传入位置参数
+        if not user_has_location:
+            result = sign_by_phone(
+                phone, 
+                location_preset_item, 
+                location_address_info, 
+                location_random_offset
+            )
+        else:
+            # 用户有自己的预设位置，不传入位置参数
+            result = sign_by_phone(
+                phone,
+                None,
+                None,
+                location_random_offset
+            )
         
         # 记录结果
         results.append({
-            "phone": user.get('phone'),
+            "phone": phone,
             "name": user.get('username', '未知用户'),
             "status": result['status'],
             "message": result['message']
@@ -260,6 +424,28 @@ def sign_user(phone):
     """为指定用户签到"""
     data = request.json or {}
     
+    # 验证手机号格式
+    if not phone or not phone.isdigit() or len(phone) != 11 or not phone.startswith('1'):
+        return jsonify({
+            "status": False, 
+            "message": f"无效的手机号格式: {phone}"
+        })
+    
+    # 获取用户信息，检查是否存在
+    user = get_stored_user(phone)
+    if not user:
+        return jsonify({
+            "status": False,
+            "message": f"未找到手机号为 {phone} 的用户，请确认storage.json中有此用户"
+        })
+    
+    # 检查用户是否激活
+    if not user.get('active', True):
+        return jsonify({
+            "status": False,
+            "message": f"用户 {user.get('username', phone)} 当前未激活，请先激活用户"
+        })
+    
     # 执行签到
     location_preset_item = data.get('location_preset_item')
     location_address_info = data.get('location_address_info')
@@ -272,6 +458,10 @@ def sign_user(phone):
         location_random_offset
     )
     
+    # 检查是否在可签到范围内
+    if result.get('result', '').startswith('[位置]不在可签到范围内'):
+        result['message'] = '不在可签到范围内，请检查位置设置'
+    
     return jsonify(result)
 
 @app.route('/api/location/presets', methods=['GET'])
@@ -283,11 +473,19 @@ def get_location_presets():
     
     for user in users:
         phone = user.get('phone')
-        if phone and 'monitor' in user and 'presetAddress' in user['monitor']:
-            presets[phone] = {
-                'username': user.get('username', '未知用户'),
-                'presets': user['monitor']['presetAddress']
-            }
+        # 检查用户是否有预设位置（老版本在monitor.presetAddress，新版本直接在presetAddress）
+        if phone:
+            user_presets = []
+            if 'monitor' in user and 'presetAddress' in user['monitor']:
+                user_presets = user['monitor']['presetAddress']
+            elif 'presetAddress' in user:
+                user_presets = user['presetAddress']
+                
+            if user_presets:
+                presets[phone] = {
+                    'username': user.get('username', '未知用户'),
+                    'presets': user_presets
+                }
     
     return jsonify({"status": True, "presets": presets})
 
@@ -307,11 +505,9 @@ def add_location_preset(phone):
     found = False
     for i, user in enumerate(users_data.get('users', [])):
         if user.get('phone') == phone:
-            # 确保monitor和presetAddress字段存在
-            if 'monitor' not in user:
-                users_data['users'][i]['monitor'] = {}
-            if 'presetAddress' not in users_data['users'][i]['monitor']:
-                users_data['users'][i]['monitor']['presetAddress'] = []
+            # 确保presetAddress字段存在
+            if 'presetAddress' not in users_data['users'][i]:
+                users_data['users'][i]['presetAddress'] = []
             
             # 添加新的位置预设
             preset = {
@@ -319,7 +515,7 @@ def add_location_preset(phone):
                 'lon': data['lon'],
                 'address': data['address']
             }
-            users_data['users'][i]['monitor']['presetAddress'].append(preset)
+            users_data['users'][i]['presetAddress'].append(preset)
             
             # 保存更新后的数据
             store_user(phone, users_data['users'][i])
@@ -342,18 +538,22 @@ def delete_location_preset(phone, index):
     found = False
     for i, user in enumerate(users_data.get('users', [])):
         if user.get('phone') == phone:
-            # 检查monitor和presetAddress字段是否存在
-            if ('monitor' in user and 
-                'presetAddress' in user['monitor'] and 
-                len(user['monitor']['presetAddress']) > index):
-                
+            # 检查presetAddress字段是否存在
+            if 'presetAddress' in user and len(user['presetAddress']) > index:
                 # 删除指定索引的位置预设
-                user['monitor']['presetAddress'].pop(index)
-                
+                user['presetAddress'].pop(index)
                 # 保存更新后的数据
                 store_user(phone, user)
                 found = True
-            break
+                break
+            # 兼容旧版本，检查monitor.presetAddress
+            elif 'monitor' in user and 'presetAddress' in user['monitor'] and len(user['monitor']['presetAddress']) > index:
+                # 删除指定索引的位置预设
+                user['monitor']['presetAddress'].pop(index)
+                # 保存更新后的数据
+                store_user(phone, user)
+                found = True
+                break
     
     if not found:
         return jsonify({"status": False, "message": f"未找到手机号为 {phone} 的位置预设或索引无效"})
@@ -389,19 +589,10 @@ def add_schedule():
         return jsonify({"status": False, "message": "请提供任务数据"})
     
     # 检查必填字段
-    required_fields = ['name', 'type', 'user_type']
+    required_fields = ['name', 'type']
     for field in required_fields:
         if field not in data:
             return jsonify({"status": False, "message": f"缺少必填字段: {field}"})
-    
-    # 检查用户选择
-    if 'user_ids' not in data or not data['user_ids']:
-        # 兼容旧版本，检查user_id字段
-        if 'user_id' not in data or not data['user_id']:
-            return jsonify({"status": False, "message": "请至少选择一个用户"})
-        else:
-            # 将单个user_id转换为user_ids数组
-            data['user_ids'] = [data['user_id']]
     
     # 根据任务类型检查其他必填字段
     task_type = data.get('type')
@@ -411,6 +602,21 @@ def add_schedule():
         
         if task_type == 'weekly' and ('days' not in data or not data['days']):
             return jsonify({"status": False, "message": "每周任务必须指定星期几"})
+        
+        # 检查用户选择
+        if 'user_type' not in data:
+            return jsonify({"status": False, "message": "缺少必填字段: user_type"})
+        
+        if data.get('user_type') == 'all':
+            # 全部用户模式
+            data['user_ids'] = ["all"]
+        elif 'user_ids' not in data or not data['user_ids']:
+            # 兼容旧版本，检查user_id字段
+            if 'user_id' not in data or not data['user_id']:
+                return jsonify({"status": False, "message": "请至少选择一个用户"})
+            else:
+                # 将单个user_id转换为user_ids数组
+                data['user_ids'] = [data['user_id']]
     
     elif task_type == 'interval':
         if 'interval' not in data:
@@ -418,6 +624,37 @@ def add_schedule():
         
         if 'unit' not in data:
             return jsonify({"status": False, "message": "间隔任务必须指定时间单位"})
+        
+        # 检查用户选择
+        if 'user_type' not in data:
+            return jsonify({"status": False, "message": "缺少必填字段: user_type"})
+        
+        if data.get('user_type') == 'all':
+            # 全部用户模式
+            data['user_ids'] = ["all"]
+        elif 'user_ids' not in data or not data['user_ids']:
+            # 兼容旧版本，检查user_id字段
+            if 'user_id' not in data or not data['user_id']:
+                return jsonify({"status": False, "message": "请至少选择一个用户"})
+            else:
+                # 将单个user_id转换为user_ids数组
+                data['user_ids'] = [data['user_id']]
+    
+    elif task_type == 'cookie_update':
+        if 'interval' not in data:
+            return jsonify({"status": False, "message": "Cookie更新任务必须指定间隔值"})
+        
+        # 检查用户选择
+        if 'user_type' not in data:
+            return jsonify({"status": False, "message": "缺少必填字段: user_type"})
+        
+        if data['user_type'] == 'selected':
+            if 'user_ids' not in data or not data['user_ids']:
+                return jsonify({"status": False, "message": "请至少选择一个用户"})
+        elif data['user_type'] == 'all':
+            data['user_ids'] = []  # 对于全部用户，不需要 user_ids
+        else:
+            return jsonify({"status": False, "message": "无效的用户选择类型"})
     
     else:
         return jsonify({"status": False, "message": f"不支持的任务类型: {task_type}"})
@@ -439,13 +676,19 @@ def update_schedule(task_id):
     if not data:
         return jsonify({"status": False, "message": "请提供更新数据"})
     
+    # 确保task_id是整数
+    task_id = int(task_id)
+    
     # 检查任务是否存在
     task = get_task(task_id)
     if not task:
         return jsonify({"status": False, "message": f"未找到ID为 {task_id} 的任务"})
     
     # 检查用户选择
-    if 'user_ids' in data and not data['user_ids']:
+    if 'user_type' in data and data['user_type'] == 'all':
+        # 全部用户模式
+        data['user_ids'] = ["all"]
+    elif 'user_ids' in data and not data['user_ids']:
         return jsonify({"status": False, "message": "请至少选择一个用户"})
     
     # 更新任务
@@ -490,6 +733,24 @@ def execute_schedule(task_id):
     else:
         return jsonify({"status": False, "message": f"任务执行失败: {result.get('message', '未知错误')}", "result": result})
 
+@app.route('/api/schedule/<int:task_id>/toggle', methods=['POST'])
+@handle_errors
+def toggle_schedule(task_id):
+    """切换定时任务的激活状态"""
+    # 检查任务是否存在
+    task = get_task(task_id)
+    if not task:
+        return jsonify({"status": False, "message": f"未找到ID为 {task_id} 的任务"})
+    
+    # 切换任务状态
+    task['active'] = not task.get('active', True)
+    success = update_task(task_id, task)
+    
+    if success:
+        return jsonify({"status": True, "message": "任务状态更新成功", "active": task['active']})
+    else:
+        return jsonify({"status": False, "message": "任务状态更新失败"})
+
 # 健康检查端点
 @app.route('/health', methods=['GET'])
 def health_check():
@@ -519,6 +780,543 @@ def init_app():
 
 # 调用初始化函数
 init_app()
+
+@app.route('/api/logs', methods=['GET'])
+@handle_errors
+def get_logs():
+    """获取系统日志"""
+    log_type = request.args.get('type', 'scheduler')
+    limit = int(request.args.get('limit', 100))
+    
+    logs = []
+    
+    # 确保logs目录存在
+    if not os.path.exists('logs'):
+        return jsonify({"status": True, "logs": [], "message": "日志目录不存在"})
+    
+    # 根据请求的日志类型选择相应的日志文件
+    log_path = None
+    if log_type == 'scheduler':
+        log_path = 'logs/scheduler.log'
+    elif log_type == 'app':
+        log_path = 'logs/app.log'
+    elif log_type == 'daemon':
+        log_path = 'logs/daemon.log'
+    
+    # 如果找到对应的日志文件，读取内容
+    if log_path and os.path.exists(log_path):
+        with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+            # 读取最后的limit行
+            logs = [line.strip() for line in f.readlines()]
+            logs = logs[-limit:] if len(logs) > limit else logs
+    
+    return jsonify({"status": True, "logs": logs})
+
+@app.route('/api/logs/analyze', methods=['GET'])
+@handle_errors
+def analyze_logs():
+    """分析日志数据，提取签到情况统计"""
+    # 确保logs目录存在
+    if not os.path.exists('logs'):
+        return jsonify({
+            "status": True, 
+            "stats": {
+                "total_tasks": 0,
+                "successful_tasks": 0,
+                "failed_tasks": 0,
+                "total_signs": 0,
+                "successful_signs": 0,
+                "failed_signs": 0,
+                "recent_activities": []
+            },
+            "message": "日志目录不存在"
+        })
+    
+    # 读取调度器日志
+    log_path = 'logs/scheduler.log'
+    if not os.path.exists(log_path):
+        return jsonify({
+            "status": True, 
+            "stats": {
+                "total_tasks": 0,
+                "successful_tasks": 0,
+                "failed_tasks": 0,
+                "total_signs": 0,
+                "successful_signs": 0,
+                "failed_signs": 0,
+                "recent_activities": []
+            },
+            "message": "日志文件不存在"
+        })
+    
+    # 统计数据
+    stats = {
+        "total_tasks": 0,        # 总任务数
+        "successful_tasks": 0,    # 成功的任务数
+        "failed_tasks": 0,        # 失败的任务数
+        "total_signs": 0,         # 总签到次数
+        "successful_signs": 0,    # 成功的签到次数
+        "failed_signs": 0,        # 失败的签到次数
+        "recent_activities": []   # 最近活动
+    }
+    
+    # 临时存储任务执行记录
+    task_executions = {}
+    
+    with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+        lines = f.readlines()
+        
+        # 逆序处理以提取最近的事件
+        for line in reversed(lines):
+            try:
+                # 解析日志行
+                if "开始执行任务" in line:
+                    parts = line.split(" - ")
+                    if len(parts) >= 3:
+                        timestamp = parts[0]
+                        message = parts[2].strip()
+                        task_name = message.split("开始执行任务")[1].split("(ID:")[0].strip()
+                        task_id = message.split("(ID:")[1].split(")")[0].strip()
+                        
+                        if len(stats["recent_activities"]) < 10:
+                            stats["recent_activities"].append({
+                                "timestamp": timestamp,
+                                "task_name": task_name,
+                                "task_id": task_id,
+                                "type": "task_start",
+                                "message": message
+                            })
+                        
+                        stats["total_tasks"] += 1
+                        task_executions[task_id] = {"success": False, "signs": 0, "successful_signs": 0}
+                
+                # 提取任务完成信息
+                elif "任务执行完成" in line:
+                    parts = line.split(" - ")
+                    if len(parts) >= 3:
+                        timestamp = parts[0]
+                        message = parts[2].strip()
+                        
+                        if "全部成功" in message:
+                            stats["successful_tasks"] += 1
+                            # 提取用户数量
+                            users_count = int(message.split("共")[1].split("个用户")[0].strip())
+                            stats["total_signs"] += users_count
+                            stats["successful_signs"] += users_count
+                            
+                            if len(stats["recent_activities"]) < 10:
+                                stats["recent_activities"].append({
+                                    "timestamp": timestamp,
+                                    "type": "task_complete",
+                                    "status": "success",
+                                    "users_count": users_count,
+                                    "message": message
+                                })
+                        
+                        elif "部分成功" in message:
+                            stats["successful_tasks"] += 1
+                            # 提取成功/总数
+                            success_total = message.split("部分成功")[1].strip()[1:-1].split("/")
+                            success_count = int(success_total[0])
+                            total_count = int(success_total[1])
+                            
+                            stats["total_signs"] += total_count
+                            stats["successful_signs"] += success_count
+                            stats["failed_signs"] += (total_count - success_count)
+                            
+                            if len(stats["recent_activities"]) < 10:
+                                stats["recent_activities"].append({
+                                    "timestamp": timestamp,
+                                    "type": "task_complete",
+                                    "status": "partial",
+                                    "success_count": success_count,
+                                    "total_count": total_count,
+                                    "message": message
+                                })
+                        
+                        elif "全部失败" in message:
+                            stats["failed_tasks"] += 1
+                            # 提取用户数量
+                            users_count = int(message.split("共")[1].split("个用户")[0].strip())
+                            stats["total_signs"] += users_count
+                            stats["failed_signs"] += users_count
+                            
+                            if len(stats["recent_activities"]) < 10:
+                                stats["recent_activities"].append({
+                                    "timestamp": timestamp,
+                                    "type": "task_complete",
+                                    "status": "failed",
+                                    "users_count": users_count,
+                                    "message": message
+                                })
+                
+                # 提取单个用户签到信息
+                elif "为用户" in line and "执行" in line:
+                    parts = line.split(" - ")
+                    if len(parts) >= 3:
+                        timestamp = parts[0]
+                        message = parts[2].strip()
+                        
+                        # 任务成功
+                        if "执行成功" in message:
+                            if len(stats["recent_activities"]) < 10:
+                                user_id = message.split("为用户")[1].split("执行成功")[0].strip()
+                                task_name = message.split("任务")[1].split("为用户")[0].strip()
+                                
+                                stats["recent_activities"].append({
+                                    "timestamp": timestamp,
+                                    "type": "user_sign",
+                                    "status": "success",
+                                    "user_id": user_id,
+                                    "task_name": task_name,
+                                    "message": message
+                                })
+            
+            except Exception as e:
+                # 解析日志行出错，跳过
+                continue
+    
+    # 按时间排序最近活动
+    stats["recent_activities"] = sorted(stats["recent_activities"], 
+                                       key=lambda x: x["timestamp"], 
+                                       reverse=True)
+    
+    return jsonify({"status": True, "stats": stats})
+
+@app.route('/api/stats/sign', methods=['GET'])
+@handle_errors
+def get_sign_stats():
+    """获取签到统计数据"""
+    # 分析签到情况
+    all_users = get_all_users()
+    
+    stats = {
+        "total_users": len(all_users),
+        "active_users": sum(1 for user in all_users if user.get('active', True)),
+        "inactive_users": sum(1 for user in all_users if not user.get('active', True)),
+        "users_with_location": 0,
+        "users_without_location": 0,
+        "success_rate": 0.0
+    }
+    
+    # 统计有位置和无位置的用户
+    for user in all_users:
+        has_location = False
+        if 'presetAddress' in user and user['presetAddress']:
+            has_location = True
+        elif 'monitor' in user and 'presetAddress' in user['monitor'] and user['monitor']['presetAddress']:
+            has_location = True
+            
+        if has_location:
+            stats["users_with_location"] += 1
+        else:
+            stats["users_without_location"] += 1
+    
+    # 获取任务统计
+    tasks = get_schedule_tasks()
+    stats["total_tasks"] = len(tasks)
+    stats["active_tasks"] = sum(1 for task in tasks if task.get('active', True))
+    stats["inactive_tasks"] = sum(1 for task in tasks if not task.get('active', True))
+    
+    # 分析任务执行情况 - 不仅包括最后一次，还包括历史记录
+    recent_signs = {
+        "total": 0,
+        "success": 0,
+        "failed": 0
+    }
+    
+    # 定义历史记录保存路径
+    history_path = 'configs/sign_history.json'
+    sign_history = []
+    
+    # 尝试读取历史记录
+    try:
+        if os.path.exists(history_path):
+            with open(history_path, 'r', encoding='utf-8') as f:
+                sign_history = json.load(f)
+        
+        # 如果没有历史记录或格式不正确，初始化为空列表
+        if not isinstance(sign_history, list):
+            sign_history = []
+    except Exception as e:
+        app.logger.error(f"读取签到历史记录失败: {str(e)}")
+        sign_history = []
+    
+    # 获取当前任务的最新执行结果
+    for task in tasks:
+        if 'last_run' in task and task['last_run']:
+            last_run = task['last_run']
+            if 'details' in last_run:
+                # 创建历史记录条目
+                history_entry = {
+                    'time': last_run.get('time', datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
+                    'task_id': task.get('id'),
+                    'task_name': task.get('name', f"任务{task.get('id')}"),
+                    'details': last_run['details']
+                }
+                
+                # 检查是否已存在相同时间的记录，避免重复
+                is_duplicate = False
+                for entry in sign_history:
+                    if (entry.get('time') == history_entry.get('time') and
+                        entry.get('task_id') == history_entry.get('task_id')):
+                        is_duplicate = True
+                        break
+                
+                # 如果不是重复记录，添加到历史
+                if not is_duplicate:
+                    sign_history.append(history_entry)
+    
+    # 保存更新后的历史记录
+    try:
+        # 确保目录存在
+        os.makedirs(os.path.dirname(history_path), exist_ok=True)
+        # 最多保留100条记录
+        if len(sign_history) > 100:
+            sign_history = sorted(sign_history, key=lambda x: x.get('time', ''), reverse=True)[:100]
+        with open(history_path, 'w', encoding='utf-8') as f:
+            json.dump(sign_history, f, ensure_ascii=False, indent=4)
+    except Exception as e:
+        app.logger.error(f"保存签到历史记录失败: {str(e)}")
+    
+    # 统计历史记录中的签到情况 (最近7天)
+    try:
+        # 获取7天前的时间
+        current_time = datetime.datetime.now()
+        seven_days_ago = (current_time - datetime.timedelta(days=7)).strftime('%Y-%m-%d')
+        
+        # 按时间排序
+        sign_history = sorted(sign_history, key=lambda x: x.get('time', ''), reverse=True)
+        
+        # 统计最近7天的签到情况
+        for entry in sign_history:
+            entry_time = entry.get('time', '')
+            # 如果没有时间信息或格式不正确，跳过
+            if not entry_time:
+                continue
+                
+            # 提取日期部分
+            entry_date = entry_time.split(' ')[0] if ' ' in entry_time else entry_time
+            
+            # 只统计7天内的记录
+            if entry_date >= seven_days_ago:
+                for detail in entry.get('details', []):
+                    recent_signs["total"] += 1
+                    if detail.get('status', False):
+                        recent_signs["success"] += 1
+                    else:
+                        recent_signs["failed"] += 1
+    except Exception as e:
+        app.logger.error(f"统计签到历史记录失败: {str(e)}")
+        # 如果历史记录处理失败，回退到只统计最后一次执行的方法
+        recent_signs = {"total": 0, "success": 0, "failed": 0}
+        for task in tasks:
+            if 'last_run' in task and task['last_run']:
+                last_run = task['last_run']
+                if 'details' in last_run:
+                    for detail in last_run['details']:
+                        recent_signs["total"] += 1
+                        if detail.get('status', False):
+                            recent_signs["success"] += 1
+                        else:
+                            recent_signs["failed"] += 1
+    
+    stats["recent_signs"] = recent_signs
+    
+    # 计算成功率
+    if recent_signs["total"] > 0:
+        stats["success_rate"] = recent_signs["success"] / recent_signs["total"] * 100
+    
+    return jsonify({"status": True, "stats": stats})
+
+# 监听签到相关API路由
+@app.route('/api/monitor/list', methods=['GET'])
+@handle_errors
+def get_monitors():
+    """获取所有监听任务"""
+    tasks = get_monitor_tasks()
+    return jsonify({"code": 0, "message": "获取成功", "data": tasks})
+
+@app.route('/api/monitor/add', methods=['POST'])
+@handle_errors
+def add_monitor():
+    """添加监听任务"""
+    data = request.json
+    
+    # 验证必要字段
+    required_fields = ['phone', 'interval']
+    for field in required_fields:
+        if field not in data:
+            return jsonify({"code": 1, "message": f"缺少必要字段: {field}"})
+    
+    # 验证用户存在
+    user_data = get_json_object('configs/storage.json')
+    user_exists = False
+    for user in user_data.get('users', []):
+        if user.get('phone') == data['phone']:
+            user_exists = True
+            break
+    
+    if not user_exists:
+        return jsonify({"code": 1, "message": "用户不存在"})
+    
+    # 处理课程ID，如果未提供或为空，设为空数组表示监听所有课程
+    course_ids = data.get('course_ids', [])
+    if not isinstance(course_ids, list):
+        return jsonify({"code": 1, "message": "课程ID格式不正确"})
+    
+    # 验证间隔时间
+    if not isinstance(data['interval'], int) or data['interval'] < 10:
+        return jsonify({"code": 1, "message": "轮询间隔必须是大于等于10的整数"})
+    
+    # 处理延迟范围
+    delay_range = data.get('delay_range')
+    if delay_range is not None:
+        if not isinstance(delay_range, list) or len(delay_range) != 2:
+            return jsonify({"code": 1, "message": "延迟范围必须是两个整数的数组"})
+        if not all(isinstance(x, int) and x >= 0 for x in delay_range):
+            return jsonify({"code": 1, "message": "延迟范围必须是非负整数"})
+        if delay_range[0] > delay_range[1]:
+            return jsonify({"code": 1, "message": "延迟范围的最小值不能大于最大值"})
+    
+    # 创建监听任务
+    task_id = create_monitor_task(
+        phone=data['phone'],
+        course_ids=course_ids,
+        interval=data['interval'],
+        delay_range=delay_range
+    )
+    
+    return jsonify({"code": 0, "message": "监听任务创建成功", "task_id": task_id})
+
+@app.route('/api/monitor/update', methods=['POST'])
+@handle_errors
+def update_monitor():
+    """更新监听任务"""
+    data = request.json
+    
+    # 验证必要字段
+    required_fields = ['id', 'phone', 'interval']
+    for field in required_fields:
+        if field not in data:
+            return jsonify({"code": 1, "message": f"缺少必要字段: {field}"})
+    
+    # 验证任务存在
+    task = get_monitor_task(data['id'])
+    if not task:
+        return jsonify({"code": 1, "message": "监听任务不存在"})
+    
+    # 验证用户存在
+    user_data = get_json_object('configs/storage.json')
+    user_exists = False
+    for user in user_data.get('users', []):
+        if user.get('phone') == data['phone']:
+            user_exists = True
+            break
+    
+    if not user_exists:
+        return jsonify({"code": 1, "message": "用户不存在"})
+    
+    # 处理课程ID，如果未提供或为空，设为空数组表示监听所有课程
+    course_ids = data.get('course_ids', [])
+    if not isinstance(course_ids, list):
+        return jsonify({"code": 1, "message": "课程ID格式不正确"})
+    
+    # 验证间隔时间
+    if not isinstance(data['interval'], int) or data['interval'] < 10:
+        return jsonify({"code": 1, "message": "轮询间隔必须是大于等于10的整数"})
+    
+    # 处理延迟范围
+    delay_range = data.get('delay_range')
+    if delay_range is not None:
+        if not isinstance(delay_range, list) or len(delay_range) != 2:
+            return jsonify({"code": 1, "message": "延迟范围必须是两个整数的数组"})
+        if not all(isinstance(x, int) and x >= 0 for x in delay_range):
+            return jsonify({"code": 1, "message": "延迟范围必须是非负整数"})
+        if delay_range[0] > delay_range[1]:
+            return jsonify({"code": 1, "message": "延迟范围的最小值不能大于最大值"})
+    
+    # 更新监听任务
+    success = update_monitor_task(
+        task_id=data['id'],
+        phone=data['phone'],
+        course_ids=course_ids,
+        interval=data['interval'],
+        active=data.get('active', True),
+        delay_range=delay_range
+    )
+    
+    if success:
+        return jsonify({"code": 0, "message": "监听任务更新成功"})
+    else:
+        return jsonify({"code": 1, "message": "监听任务更新失败"})
+
+@app.route('/api/monitor/delete', methods=['POST'])
+@handle_errors
+def delete_monitor():
+    """删除监听任务"""
+    data = request.json
+    
+    # 验证必要字段
+    if 'id' not in data:
+        return jsonify({"code": 1, "message": "缺少必要字段: id"})
+    
+    # 验证任务存在
+    task = get_monitor_task(data['id'])
+    if not task:
+        return jsonify({"code": 1, "message": "监听任务不存在"})
+    
+    # 删除监听任务
+    success = delete_monitor_task(data['id'])
+    
+    if success:
+        return jsonify({"code": 0, "message": "监听任务删除成功"})
+    else:
+        return jsonify({"code": 1, "message": "监听任务删除失败"})
+
+@app.route('/api/monitor/toggle', methods=['POST'])
+@handle_errors
+def toggle_monitor():
+    """切换监听任务状态"""
+    data = request.json
+    
+    # 验证必要字段
+    required_fields = ['id', 'active']
+    for field in required_fields:
+        if field not in data:
+            return jsonify({"code": 1, "message": f"缺少必要字段: {field}"})
+    
+    # 验证任务存在
+    task = get_monitor_task(data['id'])
+    if not task:
+        return jsonify({"code": 1, "message": "监听任务不存在"})
+    
+    # 切换监听任务状态
+    success = toggle_monitor_task(data['id'], data['active'])
+    
+    if success:
+        return jsonify({"code": 0, "message": f"监听任务已{'激活' if data['active'] else '停用'}"})
+    else:
+        return jsonify({"code": 1, "message": "切换监听任务状态失败"})
+
+@app.route('/api/monitor/reset-id', methods=['POST'])
+@handle_errors
+def reset_monitor_id():
+    """重置监听任务ID计数器"""
+    try:
+        # 获取监听任务数据
+        monitor_data = get_json_object(MONITOR_TASKS_FILE)
+        
+        # 如果没有任务，直接重置ID为1
+        if len(monitor_data.get('tasks', [])) == 0:
+            monitor_data['next_id'] = 1
+            save_json_object(MONITOR_TASKS_FILE, monitor_data)
+            return jsonify({"code": 0, "message": "监听任务ID已重置为1"})
+        else:
+            # 如果还有任务，不允许重置ID
+            return jsonify({"code": 1, "message": "还有未删除的监听任务，请先删除所有任务再重置ID"})
+    except Exception as e:
+        return jsonify({"code": 1, "message": f"重置ID失败: {str(e)}"})
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000) 

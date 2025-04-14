@@ -8,6 +8,7 @@ import subprocess
 import time
 import platform
 import webbrowser
+import datetime
 
 def check_python_version():
     """检查Python版本是否满足要求"""
@@ -134,6 +135,44 @@ def start_direct_mode(port):
     except Exception as e:
         print(f"启动应用失败: {e}")
         return False
+
+def initialize_system():
+    """初始化系统"""
+    # 确保必要的目录存在
+    ensure_directories()
+    
+    # 检查并创建默认的cookie更新任务
+    check_default_cookie_update_task()
+    
+    # 初始化定时任务调度器
+    initialize_scheduler()
+
+def check_default_cookie_update_task():
+    """检查并创建默认的cookie更新任务"""
+    tasks = get_schedule_tasks()
+    
+    # 检查是否已存在cookie更新任务
+    has_cookie_task = False
+    for task in tasks:
+        if task.get('type') == 'cookie_update' and task.get('name') == '自动更新Cookie':
+            has_cookie_task = True
+            break
+    
+    if not has_cookie_task:
+        # 创建默认的cookie更新任务
+        default_task = {
+            'name': '自动更新Cookie',
+            'type': 'cookie_update',
+            'interval': 21,  # 21天更新一次
+            'active': True,
+            'created_at': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        
+        # 添加到任务列表
+        tasks.append(default_task)
+        save_schedule_tasks(tasks)
+        
+        print("已创建默认的Cookie更新任务")
 
 def main():
     """主函数"""

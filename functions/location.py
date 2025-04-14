@@ -44,7 +44,13 @@ def location_sign(args):
             }
         )
         
-        msg = '[位置]签到成功' if result['data'] == 'success' else f"[位置]{result['data']}"
+        # 检查是否在可签到范围内
+        if result['data'] == 'success':
+            msg = '[位置]签到成功'
+        elif '不在可签到范围内' in result['data']:
+            msg = '[位置]不在可签到范围内'
+        else:
+            msg = f"[位置]{result['data']}"
         
         if is_debug_mode():
             debug_print(f"位置签到结果: {result['data']}", "green" if result['data'] == 'success' else "red")
@@ -81,6 +87,11 @@ def location_sign(args):
                 if is_debug_mode():
                     debug_print(f"位置签到成功，使用第{i+1}个位置", "green")
                 break
+            elif '不在可签到范围内' in result['data']:
+                msg = '[位置]不在可签到范围内'
+                if is_debug_mode():
+                    debug_print(f"位置不在可签到范围内，尝试下一个位置", "yellow")
+                delay(1)
             else:
                 msg = f"[位置]{result['data']}"
                 if is_debug_mode():
@@ -279,13 +290,37 @@ def handle_location_sign(params, activity, configs, name, preset_item=None, addr
         if random_offset:
             debug_print("位置随机偏移功能已开启", "blue")
     
-    preset_address = configs.get('monitor', {}).get('presetAddress', [])
+    # 获取用户的预设位置
+    preset_address = configs.get('presetAddress', [])
     
     if is_debug_mode():
-        debug_print(f"预设位置数量: {len(preset_address)}", "blue")
+        debug_print(f"用户预设位置数量: {len(preset_address)}", "blue")
     
+    # 首先检查用户是否有自己的预设位置
+    if preset_address:
+        # 用户有自己的预设位置，优先使用
+        address_item = preset_address[0]  # 使用第一个预设位置
+        
+        if is_debug_mode():
+            debug_print(f"使用用户自己的预设位置: 经度={address_item['lon']}, 纬度={address_item['lat']}, 地址={address_item['address']}", "blue")
+        
+        # 随机偏移坐标
+        lon, lat = address_item['lon'], address_item['lat']
+        if random_offset:
+            lon, lat = random_offset_coordinates(lon, lat)
+        
+        result = location_sign({
+            **params,
+            'activeId': activity['activeId'],
+            'name': name,
+            'address': address_item['address'],
+            'lat': lat,
+            'lon': lon,
+            'fid': params.get('fid', '-1')
+        })
+        return result, configs
     # 检查是否使用预设位置
-    if preset_item is not None and preset_item >= 0 and preset_item < len(preset_address):
+    elif preset_item is not None and preset_item >= 0 and preset_item < len(preset_address):
         # 使用预设
         address_item = preset_address[preset_item]
         
@@ -332,12 +367,10 @@ def handle_location_sign(params, activity, configs, name, preset_item=None, addr
                 debug_print(f"解析后的位置信息: 经度={address_item['lon']}, 纬度={address_item['lat']}, 地址={address_item['address']}", "green")
             
             # 添加到预设地址
-            if not configs.get('monitor'):
-                configs['monitor'] = {}
-            if not configs['monitor'].get('presetAddress'):
-                configs['monitor']['presetAddress'] = []
+            if 'presetAddress' not in configs:
+                configs['presetAddress'] = []
             
-            configs['monitor']['presetAddress'].append(address_item)
+            configs['presetAddress'].append(address_item)
             
             if is_debug_mode():
                 debug_print("已将新位置添加到预设列表", "green")

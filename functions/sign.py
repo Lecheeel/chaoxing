@@ -114,8 +114,34 @@ def sign_by_phone(phone, location_preset_item=None, location_address_info=None, 
         if is_debug_mode():
             debug_print(f"成功获取用户信息: 手机号={params['phone']}", "green")
         
+        # 构建用户配置
+        user_configs = {}
+        
+        # 检查用户是否有自己的预设位置
+        has_presets = False
+        
+        # 检查直接存储在presetAddress中的位置
+        if 'presetAddress' in user and user['presetAddress']:
+            user_configs['presetAddress'] = user['presetAddress']
+            has_presets = True
+            if is_debug_mode():
+                debug_print(f"用户有自己的预设位置(presetAddress), 将使用用户自己的位置信息", "blue")
+                debug_print(f"用户预设位置: {user['presetAddress'][0]}", "blue")
+        
+        # 检查存储在monitor.presetAddress中的位置(旧版本)
+        elif 'monitor' in user and 'presetAddress' in user['monitor'] and user['monitor']['presetAddress']:
+            user_configs['presetAddress'] = user['monitor']['presetAddress']
+            has_presets = True
+            if is_debug_mode():
+                debug_print(f"用户有自己的预设位置(monitor.presetAddress), 将使用用户自己的位置信息", "blue")
+                debug_print(f"用户预设位置: {user['monitor']['presetAddress'][0]}", "blue")
+        else:
+            # 用户没有预设位置，使用其他monitor配置
+            if 'monitor' in user:
+                user_configs = user['monitor']
+        
         # 调用签到功能
-        return execute_sign(params, user.get('monitor', {}), user.get('username', '未知用户'),
+        return execute_sign(params, user_configs, user.get('username', '未知用户'), 
                            location_preset_item, location_address_info, location_random_offset)
     
     except Exception as e:
@@ -255,6 +281,15 @@ def execute_sign(params, configs, name, location_preset_item=None, location_addr
         if is_debug_mode():
             debug_print(f"签到结果: {result}", "green")
             debug_print("开始保存用户信息", "blue")
+        
+        # 检查签到结果
+        if '[位置]不在可签到范围内' in result:
+            return {
+                'status': False,
+                'message': '签到失败',
+                'result': result,
+                'activity': activity
+            }
         
         # 记录签到信息并更新用户信息
         phone = params.pop('phone', None)
