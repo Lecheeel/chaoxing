@@ -8,11 +8,11 @@ updates:
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "daily"
     open-pull-requests-limit: 10
     
   - package-ecosystem: "npm"
     directory: "/webpanel/static"
     schedule:
-      interval: "weekly"
+      interval: "daily"
     open-pull-requests-limit: 10 
