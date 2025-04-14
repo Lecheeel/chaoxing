@@ -7,10 +7,10 @@ import traceback
 import os
 from dateutil import parser
 
-from utils.file import get_schedule_tasks, save_schedule_tasks, update_schedule_task
+from utils.file import get_schedule_tasks, save_schedule_tasks, update_schedule_task, get_stored_user, get_all_users
 from utils.helper import colored_print
 from utils.debug import is_debug_mode, debug_print
-from sign_api import sign_by_phone, sign_by_index
+from functions.sign import sign_by_phone, sign_by_index
 
 # 全局线程对象，用于控制定时任务执行
 scheduler_thread = None
@@ -226,6 +226,12 @@ def register_task(task):
                 unit_str = "秒"
             
             log_scheduler_event(f"已注册间隔任务: {task_name} (ID: {task_id}), 间隔: {interval} {unit_str}")
+        
+        elif task_type == 'cookie_update':
+            # Cookie更新任务
+            interval = task.get('interval', 21)  # 默认21天
+            job = schedule.every(interval).days.do(execute_task, task_id=task_id)
+            log_scheduler_event(f"已注册Cookie更新任务: {task_name} (ID: {task_id}), 间隔: {interval} 天")
     except Exception as e:
         error_msg = f"注册任务 {task_name} (ID: {task_id}) 失败: {str(e)}"
         log_scheduler_event(error_msg, 'error')
@@ -253,158 +259,221 @@ def execute_task(task_id):
     
     # 获取任务信息
     task_name = task.get('name', f'任务{task_id}')
-    user_type = task.get('user_type', 'phone')
-    user_ids = task.get('user_ids', [])
+    task_type = task.get('type')
     
-    # 兼容旧版本，如果没有user_ids但有user_id，则转换为列表
-    if not user_ids and 'user_id' in task:
-        user_ids = [task['user_id']]
-    
-    # 如果没有用户ID，则记录错误并返回
-    if not user_ids:
-        error_msg = f"任务 {task_name} 没有指定用户ID"
-        log_scheduler_event(error_msg, 'error')
+    # 根据任务类型执行不同的操作
+    if task_type == 'cookie_update':
+        # 更新所有用户的Cookie
+        from webpanel.app import update_all_user_cookies
+        result = update_all_user_cookies()
         
         # 更新任务的最后执行时间和结果
         now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         last_run = {
             'time': now,
-            'status': False,
-            'message': "没有指定用户ID"
+            'status': result['status'],
+            'message': result['message'],
+            'results': result.get('results', [])
         }
         
         task['last_run'] = last_run
         update_schedule_task(task_id, task)
         
-        return {
-            'status': False,
-            'message': "没有指定用户ID"
-        }
-    
-    # 位置信息设置
-    location_preset_item = task.get('location_preset_item')
-    location_random_offset = task.get('location_random_offset', True)
-    
-    # 自定义位置参数
-    location_address = task.get('location_address')
-    location_lon = task.get('location_lon')
-    location_lat = task.get('location_lat')
-    
-    # 构建位置信息参数
-    location_info = None
-    if location_address and location_lon is not None and location_lat is not None:
-        location_info = {
-            'address': location_address,
-            'lon': location_lon,
-            'lat': location_lat
-        }
-    
-    log_scheduler_event(f"开始执行任务 {task_name} (ID: {task_id})")
-    
-    # 存储所有执行结果
-    all_results = []
-    success_count = 0
-    failed_count = 0
-    
-    # 依次为每个用户执行签到
-    for user_id in user_ids:
-        try:
-            if user_type == 'phone':
-                if location_info:
-                    # 使用自定义位置参数
-                    result = sign_by_phone(
-                        user_id,
-                        location_address_info=location_info,
-                        location_random_offset=location_random_offset
-                    )
-                else:
-                    # 使用预设位置
-                    result = sign_by_phone(
-                        user_id,
-                        location_preset_item=location_preset_item,
-                        location_random_offset=location_random_offset
-                    )
-            else:  # index
-                if location_info:
-                    # 使用自定义位置参数
-                    result = sign_by_index(
-                        int(user_id),
-                        location_address_info=location_info,
-                        location_random_offset=location_random_offset
-                    )
-                else:
-                    # 使用预设位置
-                    result = sign_by_index(
-                        int(user_id),
-                        location_preset_item=location_preset_item,
-                        location_random_offset=location_random_offset
-                    )
-            
-            # 记录此用户的结果
-            all_results.append({
-                'user_id': user_id,
-                'status': result.get('status', False),
-                'message': result.get('message', '未知结果')
-            })
-            
-            # 统计成功失败数
-            if result.get('status', False):
-                success_count += 1
-            else:
-                failed_count += 1
-            
-            status_str = "成功" if result.get('status', False) else "失败"
-            log_scheduler_event(
-                f"任务 {task_name} 为用户 {user_id} 执行{status_str}: {result.get('message', '未知结果')}",
-                'info' if result.get('status', False) else 'warning'
-            )
-            
-        except Exception as e:
-            # 处理单个用户的异常，不影响其他用户
-            error_msg = f"任务 {task_name} 为用户 {user_id} 执行出错: {str(e)}"
-            log_scheduler_event(error_msg, 'error')
-            log_scheduler_event(traceback.format_exc(), 'error')
-            
-            all_results.append({
-                'user_id': user_id,
-                'status': False,
-                'message': f"执行出错: {str(e)}"
-            })
-            failed_count += 1
-    
-    # 更新任务的最后执行时间和结果
-    now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    
-    # 根据结果生成摘要
-    if success_count > 0 and failed_count == 0:
-        status = True
-        message = f"全部成功，共 {success_count} 个用户"
-    elif success_count > 0 and failed_count > 0:
-        status = True
-        message = f"部分成功 ({success_count}/{success_count+failed_count})"
+        return result
     else:
-        status = False
-        message = f"全部失败，共 {failed_count} 个用户"
-    
-    last_run = {
-        'time': now,
-        'status': status,
-        'message': message,
-        'details': all_results
-    }
-    
-    task['last_run'] = last_run
-    update_schedule_task(task_id, task)
-    
-    log_scheduler_event(f"任务 {task_name} 执行完成: {message}")
-    
-    return {
-        'status': status,
-        'message': message,
-        'results': all_results,
-        'success_count': success_count,
-        'failed_count': failed_count
-    }
+        # 原有的签到任务处理逻辑
+        user_type = task.get('user_type', 'phone')
+        user_ids = task.get('user_ids', [])
+        
+        # 兼容旧版本，如果没有user_ids但有user_id，则转换为列表
+        if not user_ids and 'user_id' in task:
+            user_ids = [task['user_id']]
+            
+        # 处理"全部用户"的情况
+        if user_type == 'all' or (user_ids and user_ids[0] == "all"):
+            all_users = get_all_users()
+            # 只选择激活的用户
+            user_ids = [user["phone"] for user in all_users if user.get('active', True)]
+            log_scheduler_event(f"任务 {task_name} 设置为执行所有激活用户，共 {len(user_ids)} 个")
+        
+        # 如果没有用户ID，则记录错误并返回
+        if not user_ids:
+            error_msg = f"任务 {task_name} 没有指定用户ID"
+            log_scheduler_event(error_msg, 'error')
+            
+            # 更新任务的最后执行时间和结果
+            now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            last_run = {
+                'time': now,
+                'status': False,
+                'message': "没有指定用户ID"
+            }
+            
+            task['last_run'] = last_run
+            update_schedule_task(task_id, task)
+            
+            return {
+                'status': False,
+                'message': "没有指定用户ID"
+            }
+        
+        # 位置信息设置
+        location_preset_item = task.get('location_preset_item')
+        location_random_offset = task.get('location_random_offset', True)
+        
+        # 自定义位置参数
+        location_address = task.get('location_address')
+        location_lon = task.get('location_lon')
+        location_lat = task.get('location_lat')
+        
+        # 构建位置信息参数
+        location_info = None
+        if location_address and location_lon is not None and location_lat is not None:
+            location_info = {
+                'address': location_address,
+                'lon': location_lon,
+                'lat': location_lat
+            }
+        
+        log_scheduler_event(f"开始执行任务 {task_name} (ID: {task_id})")
+        
+        # 存储所有执行结果
+        all_results = []
+        success_count = 0
+        failed_count = 0
+        
+        # 依次为每个用户执行签到
+        for user_id in user_ids:
+            try:
+                # 获取用户信息，检查是否激活
+                user = get_stored_user(user_id)
+                
+                # 检查用户是否激活，未激活则跳过
+                if user and not user.get('active', True):
+                    log_scheduler_event(f"任务 {task_name} 跳过未激活的用户 {user_id}", 'warning')
+                    all_results.append({
+                        'user_id': user_id,
+                        'status': False,
+                        'message': "用户未激活，已跳过"
+                    })
+                    failed_count += 1
+                    continue
+                
+                if user_type == 'phone':
+                    # 获取用户信息，检查是否有预设位置
+                    user_has_location = False
+                    
+                    # 检查用户是否有预设位置（检查两个可能的存储位置）
+                    if user:
+                        if 'presetAddress' in user and user['presetAddress']:
+                            user_has_location = True
+                        elif 'monitor' in user and 'presetAddress' in user['monitor'] and user['monitor']['presetAddress']:
+                            user_has_location = True
+                    
+                    if user_has_location:
+                        # 用户有自己的预设位置，不传入位置参数
+                        if is_debug_mode():
+                            debug_print(f"用户 {user_id} 有自己的预设位置，使用用户自定义位置进行签到", "blue")
+                        
+                        result = sign_by_phone(
+                            user_id,
+                            location_random_offset=location_random_offset
+                        )
+                    elif location_info:
+                        # 使用自定义位置参数
+                        result = sign_by_phone(
+                            user_id,
+                            location_address_info=location_info,
+                            location_random_offset=location_random_offset
+                        )
+                    else:
+                        # 使用预设位置
+                        result = sign_by_phone(
+                            user_id,
+                            location_preset_item=location_preset_item,
+                            location_random_offset=location_random_offset
+                        )
+                else:  # index
+                    if location_info:
+                        # 使用自定义位置参数
+                        result = sign_by_index(
+                            int(user_id),
+                            location_address_info=location_info,
+                            location_random_offset=location_random_offset
+                        )
+                    else:
+                        # 使用预设位置
+                        result = sign_by_index(
+                            int(user_id),
+                            location_preset_item=location_preset_item,
+                            location_random_offset=location_random_offset
+                        )
+                
+                # 记录此用户的结果
+                all_results.append({
+                    'user_id': user_id,
+                    'status': result.get('status', False),
+                    'message': result.get('message', '未知结果')
+                })
+                
+                # 统计成功失败数
+                if result.get('status', False):
+                    success_count += 1
+                else:
+                    failed_count += 1
+                
+                status_str = "成功" if result.get('status', False) else "失败"
+                log_scheduler_event(
+                    f"任务 {task_name} 为用户 {user_id} 执行{status_str}: {result.get('message', '未知结果')}",
+                    'info' if result.get('status', False) else 'warning'
+                )
+                
+            except Exception as e:
+                # 处理单个用户的异常，不影响其他用户
+                error_msg = f"任务 {task_name} 为用户 {user_id} 执行出错: {str(e)}"
+                log_scheduler_event(error_msg, 'error')
+                log_scheduler_event(traceback.format_exc(), 'error')
+                
+                all_results.append({
+                    'user_id': user_id,
+                    'status': False,
+                    'message': f"执行出错: {str(e)}"
+                })
+                failed_count += 1
+        
+        # 更新任务的最后执行时间和结果
+        now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        # 根据结果生成摘要
+        if success_count > 0 and failed_count == 0:
+            status = True
+            message = f"全部成功，共 {success_count} 个用户"
+        elif success_count > 0 and failed_count > 0:
+            status = True
+            message = f"部分成功 ({success_count}/{success_count+failed_count})"
+        else:
+            status = False
+            message = f"全部失败，共 {failed_count} 个用户"
+        
+        last_run = {
+            'time': now,
+            'status': status,
+            'message': message,
+            'details': all_results
+        }
+        
+        task['last_run'] = last_run
+        update_schedule_task(task_id, task)
+        
+        log_scheduler_event(f"任务 {task_name} 执行完成: {message}")
+        
+        return {
+            'status': status,
+            'message': message,
+            'results': all_results,
+            'success_count': success_count,
+            'failed_count': failed_count
+        }
 
 def create_task(task_data):
     """创建新的定时任务"""
@@ -412,7 +481,7 @@ def create_task(task_data):
     
     # 生成新任务ID
     if tasks:
-        max_id = max(task.get('id', 0) for task in tasks)
+        max_id = max(int(task.get('id', 0)) for task in tasks)
         new_id = max_id + 1
     else:
         new_id = 1
@@ -435,6 +504,12 @@ def create_task(task_data):
 
 def update_task(task_id, task_data):
     """更新定时任务"""
+    # 确保任务ID是整数
+    task_id = int(task_id)
+    # 确保task_data中的id也是整数
+    if 'id' in task_data:
+        task_data['id'] = int(task_data['id'])
+    
     result = update_schedule_task(task_id, task_data)
     if result:
         # 清除并重新加载所有任务
@@ -449,10 +524,14 @@ def delete_task(task_id):
     """删除定时任务"""
     tasks = get_schedule_tasks()
     
+    # 确保task_id是整数类型
+    task_id = int(task_id)
+    
     # 查找并删除任务
     found = False
     for i, task in enumerate(tasks):
-        if task.get('id') == task_id:
+        # 确保任务ID是整数类型
+        if int(task.get('id', 0)) == task_id:
             del tasks[i]
             found = True
             break
@@ -474,8 +553,12 @@ def get_task(task_id):
     """获取指定ID的任务"""
     tasks = get_schedule_tasks()
     
+    # 确保task_id是整数类型
+    task_id = int(task_id)
+    
     for task in tasks:
-        if task.get('id') == task_id:
+        # 确保任务ID是整数类型
+        if int(task.get('id', 0)) == task_id:
             return task
     
     return None

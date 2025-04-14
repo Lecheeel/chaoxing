@@ -503,4 +503,60 @@ body {
     background-color: rgba(108, 117, 125, 0.15);
     color: #6c757d;
     border: 1px solid rgba(108, 117, 125, 0.3);
+}
+
+/* 可点击状态徽章样式 */
+.status-badge.clickable {
+    cursor: pointer;
+    position: relative;
+}
+
+.status-badge.clickable:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.status-badge.clickable:active {
+    transform: translateY(0);
+}
+
+.status-badge.clickable::after {
+    content: '';
+    position: absolute;
+    bottom: -3px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 2px;
+    background-color: currentColor;
+    transition: width 0.2s ease;
+}
+
+.status-badge.clickable:hover::after {
+    width: 70%;
+}
+
+.status-badge.disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* 用户状态开关样式 */
+#userTable .status-toggle {
+    margin-top: 6px;
+    width: 2.2em;
+    height: 1.2em;
+    cursor: pointer;
+}
+
+#userTable td .form-check {
+    margin-bottom: 0;
+    justify-content: center;
+}
+
+/* 状态列居中显示 */
+#userTable td:nth-child(4) .d-flex {
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
 } 
