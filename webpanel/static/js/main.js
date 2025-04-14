@@ -39,7 +39,6 @@ $(document).ready(function() {
     $('#saveBatchLocationBtn').on('click', saveBatchLocation);
     $('#togglePassword').on('click', togglePassword);
     $('#toggleCurrentPassword').on('click', toggleCurrentPassword);
-    
     // 监听签到相关绑定
     $('#addMonitorBtn').on('click', addMonitorTask);
     $('#saveMonitorBtn').on('click', saveMonitorTask);
@@ -56,7 +55,7 @@ $(document).ready(function() {
         // 预先加载监听用户选项
         loadMonitorUserOptions();
     });
-    
+
     // 设置导航链接功能
     $('.navbar-nav .nav-link').on('click', function() {
         $('.navbar-nav .nav-link').removeClass('active');
@@ -601,16 +600,17 @@ function loadUsers() {
 function updateUserTable() {
     const tableBody = $('#userTable tbody');
     tableBody.empty();
+
     
+    // 如果没有用户，显示提示信息
     if (users.length === 0) {
         tableBody.html('<tr><td colspan="5" class="text-center">未找到用户，请添加新用户</td></tr>');
         return;
     }
     
-    // 使用模板
-    const actionTemplate = document.getElementById('userActionsTemplate');
-    const statusTemplate = document.getElementById('userStatusTemplate');
-    
+    // 获取操作按钮和状态徽章模板
+    const actionsTemplate = document.getElementById('userActionsTemplate').innerHTML;
+    const statusTemplate = document.getElementById('userStatusTemplate').innerHTML;
     users.forEach((user, index) => {
         const row = $('<tr>');
         
@@ -828,7 +828,11 @@ function editUser(phone) {
     }
     
     document.getElementById('editPassword').value = '';
-    document.getElementById('editActive').checked = user.active !== false;
+    
+    // 明确设置激活状态开关，确保与用户状态一致
+    const activeCheckbox = document.getElementById('editActive');
+    // user.active 可能是 undefined、true 或 false，我们需要将 undefined 视为 true（默认激活）
+    activeCheckbox.checked = user.active !== false;
     
     // 显示模态框
     new bootstrap.Modal(document.getElementById('editUserModal')).show();
@@ -850,7 +854,7 @@ function saveUser() {
     // 构建要更新的数据
     const data = { 
         phone: newPhone,
-        active 
+        active: active // 确保active值被正确传递
     };
     
     if (password) {
@@ -1427,12 +1431,12 @@ function toggleUserActive(phone, isActive) {
             } else {
                 showError(response.data.message);
                 // 不需要回滚UI状态，因为状态是根据按钮点击前的状态来确定的
+
             }
         })
         .catch(error => {
             console.error('更新用户状态出错:', error);
             showError('更新用户状态时发生错误: ' + (error.message || '未知错误'));
-            // 不需要回滚UI状态
         });
 }
 
@@ -3998,4 +4002,499 @@ function updateSchedule() {
             console.error('更新定时任务失败:', error);
             showToast('更新定时任务失败', 'error');
         });
+}
+
+/**
+ * 加载监控状态列表
+ */
+function loadMonitors() {
+    showLoading('加载监控数据中...');
+    
+    axios.get('/api/monitors')
+        .then(function(response) {
+            if (response.data.status) {
+                monitors = response.data.monitors || [];
+                renderMonitorTable(monitors);
+            } else {
+                showToast('获取监控数据失败: ' + response.data.message, 'error');
+                
+                // 显示重试按钮
+                Swal.fire({
+                    title: '获取监控数据失败',
+                    text: response.data.message || '服务器返回错误',
+                    icon: 'error',
+                    showCancelButton: true,
+                    confirmButtonColor: '#3085d6',
+                    cancelButtonColor: '#d33',
+                    confirmButtonText: '重试',
+                    cancelButtonText: '关闭'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        loadMonitors(); // 重试加载
+                    }
+                });
+            }
+            hideLoading();
+        })
+        .catch(function(error) {
+            console.error('获取监控数据失败:', error);
+            hideLoading();
+            
+            let errorMessage = '网络错误，无法获取监控数据';
+            if (error.response && error.response.data && error.response.data.message) {
+                errorMessage = error.response.data.message;
+            }
+            
+            // 显示错误并提供重试选项
+            Swal.fire({
+                title: '获取监控数据失败',
+                text: errorMessage,
+                icon: 'error',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: '重试',
+                cancelButtonText: '关闭'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    loadMonitors(); // 重试加载
+                }
+            });
+        });
+}
+
+/**
+ * 渲染监控状态表格
+ */
+function renderMonitorTable(monitors) {
+    const tableBody = document.querySelector('#monitorTable tbody');
+    tableBody.innerHTML = '';
+    
+    if (!monitors || monitors.length === 0) {
+        const row = document.createElement('tr');
+        row.innerHTML = '<td colspan="9" class="text-center text-muted py-4">暂无监控数据</td>';
+        tableBody.appendChild(row);
+        return;
+    }
+    
+    // 遍历前先确保监控状态与is_running值一致
+    monitors = monitors.map(monitor => {
+        // 如果状态是stopped但is_running为true，修正为false
+        if (monitor.status === 'stopped' && monitor.is_running === true) {
+            console.log(`修正监控状态不一致: ${monitor.phone}`);
+            return {...monitor, is_running: false};
+        }
+        return monitor;
+    });
+    
+    monitors.forEach(function(monitor, index) {
+        const row = document.createElement('tr');
+        row.dataset.phone = monitor.phone;
+        
+        // 运行状态徽章
+        let statusBadge = '';
+        let statusClass = '';
+        
+        if (monitor.is_running) {
+            statusBadge = '<span class="badge bg-success">运行中</span>';
+            statusClass = 'table-success';
+        } else if (monitor.status === 'stopped') {
+            statusBadge = '<span class="badge bg-secondary">已停止</span>';
+        } else {
+            statusBadge = '<span class="badge bg-warning text-dark">未知</span>';
+        }
+        
+        // 为运行中的监控行添加背景色
+        if (statusClass) {
+            row.classList.add(statusClass);
+        }
+        
+        // 格式化时间，如果为空则显示"--"
+        const formatTime = (timeStr) => timeStr ? timeStr : '--';
+        
+        // 创建操作按钮
+        let actionButtons = '';
+        if (monitor.is_running) {
+            actionButtons = `
+                <button class="btn btn-sm btn-danger stop-monitor" title="停止监控">
+                    <i class="fas fa-stop"></i>
+                </button>
+            `;
+        } else {
+            actionButtons = `
+                <button class="btn btn-sm btn-primary start-monitor" title="启动监控">
+                    <i class="fas fa-play"></i>
+                </button>
+            `;
+        }
+        
+        // 错误信息提示
+        let errorInfo = '';
+        if (monitor.last_error) {
+            errorInfo = `<small class="d-block text-danger" title="${monitor.last_error}">
+                <i class="fas fa-exclamation-circle"></i> ${monitor.last_error.length > 30 ? monitor.last_error.substring(0, 30) + '...' : monitor.last_error}
+            </small>`;
+        }
+        
+        const signCountBadge = monitor.sign_count > 0 ? 
+            `<span class="badge bg-success">${monitor.sign_count}</span>` : 
+            `<span class="badge bg-light text-dark">${monitor.sign_count || 0}</span>`;
+            
+        const errorCountBadge = monitor.error_count > 0 ? 
+            `<span class="badge bg-danger">${monitor.error_count}</span>` : 
+            `<span class="badge bg-light text-dark">${monitor.error_count || 0}</span>`;
+        
+        row.innerHTML = `
+            <td>${monitor.phone}</td>
+            <td>${monitor.username || '未知用户'}</td>
+            <td>${statusBadge}</td>
+            <td>${formatTime(monitor.start_time)}</td>
+            <td>${formatTime(monitor.last_check_time)}</td>
+            <td>${formatTime(monitor.last_sign_time)}</td>
+            <td>${signCountBadge}</td>
+            <td>${errorCountBadge} ${errorInfo}</td>
+            <td>
+                <div class="btn-group">
+                    ${actionButtons}
+                </div>
+            </td>
+        `;
+        
+        tableBody.appendChild(row);
+    });
+    
+    // 绑定监控操作事件
+    document.querySelectorAll('#monitorTable .start-monitor').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const phone = this.closest('tr').dataset.phone;
+            showStartMonitorModal(phone);
+        });
+    });
+    
+    document.querySelectorAll('#monitorTable .stop-monitor').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const phone = this.closest('tr').dataset.phone;
+            stopMonitor(phone);
+        });
+    });
+}
+
+/**
+ * 显示启动监控模态框
+ */
+function showStartMonitorModal(phone) {
+    // 查找用户信息
+    const user = users.find(u => u.phone === phone);
+    if (!user) {
+        showToast('未找到用户信息', 'error');
+        return;
+    }
+    
+    // 设置模态框用户信息
+    document.getElementById('monitorPhone').value = phone;
+    document.getElementById('monitorUsername').value = user.username || phone;
+    document.getElementById('monitorDelay').value = '0'; // 默认延迟0秒
+    
+    // 加载位置预设
+    const locationSelect = document.getElementById('monitorLocation');
+    locationSelect.innerHTML = '<option value="">-- 使用默认位置 --</option>';
+    
+    // 显示位置预设信息
+    if (userPresets[phone] && userPresets[phone].presets) {
+        const presets = userPresets[phone].presets;
+        if (presets.length === 0) {
+            // 如果没有位置预设，添加提示信息
+            const option = document.createElement('option');
+            option.value = "";
+            option.textContent = "未配置位置预设，将使用系统默认位置";
+            option.disabled = true;
+            locationSelect.appendChild(option);
+        } else {
+            // 添加每个位置预设
+            presets.forEach((preset, index) => {
+                const option = document.createElement('option');
+                option.value = index;
+                option.textContent = `预设 #${index+1}: ${preset.address} (${preset.lon}, ${preset.lat})`;
+                locationSelect.appendChild(option);
+            });
+            
+            // 选择第一个位置预设作为默认选项
+            if (presets.length > 0) {
+                locationSelect.value = "0";
+            }
+        }
+    } else {
+        // 如果未加载位置预设，添加提示信息
+        const option = document.createElement('option');
+        option.value = "";
+        option.textContent = "未加载位置预设数据";
+        option.disabled = true;
+        locationSelect.appendChild(option);
+    }
+    
+    // 显示模态框
+    const modal = new bootstrap.Modal(document.getElementById('startMonitorModal'));
+    modal.show();
+}
+
+/**
+ * 启动监控
+ */
+function startMonitor() {
+    const phone = document.getElementById('monitorPhone').value;
+    const delay = parseInt(document.getElementById('monitorDelay').value) || 0;
+    const locationPresetIndex = document.getElementById('monitorLocation').value;
+    
+    if (!phone) {
+        showToast('无效的用户信息', 'error');
+        return;
+    }
+    
+    // 准备数据
+    const data = {
+        delay: delay
+    };
+    
+    // 如果选择了位置预设，添加到请求
+    if (locationPresetIndex !== '') {
+        data.location_preset_index = parseInt(locationPresetIndex);
+    }
+    
+    showLoading('启动监控中...');
+    
+    // 发送请求
+    axios.post(`/api/monitors/${phone}/start`, data)
+        .then(function(response) {
+            if (response.data.status) {
+                const detail = response.data.detail || {};
+                const username = detail.username || '未知用户';
+                const delayMsg = detail.delay > 0 ? `，签到延迟 ${detail.delay} 秒` : '';
+                const locationMsg = detail.location_preset_index !== undefined ? 
+                    `，使用位置预设 #${detail.location_preset_index + 1}` : '';
+                
+                showToast(`已成功启动 ${username} 的监控${delayMsg}${locationMsg}`, 'success');
+                
+                // 关闭模态框
+                bootstrap.Modal.getInstance(document.getElementById('startMonitorModal')).hide();
+                // 重新加载监控状态
+                loadMonitors();
+            } else {
+                showToast('启动监控失败: ' + response.data.message, 'error');
+            }
+            hideLoading();
+        })
+        .catch(function(error) {
+            console.error('启动监控失败:', error);
+            let errorMessage = '启动监控失败';
+            if (error.response && error.response.data && error.response.data.message) {
+                errorMessage += ': ' + error.response.data.message;
+            }
+            showToast(errorMessage, 'error');
+            hideLoading();
+        });
+}
+
+/**
+ * 停止监控
+ */
+function stopMonitor(phone) {
+    if (!phone) {
+        showToast('无效的用户信息', 'error');
+        return;
+    }
+    
+    // 确认对话框
+    Swal.fire({
+        title: '停止监控',
+        text: '确定要停止此用户的监控吗？',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: '确定停止',
+        cancelButtonText: '取消'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            showLoading('停止监控中...');
+            
+            // 发送请求
+            axios.post(`/api/monitors/${phone}/stop`)
+                .then(function(response) {
+                    hideLoading();
+                    
+                    // 无论返回成功或失败，都启动检查序列，确保UI状态正确
+                    checkMonitorStopStatus(phone, response.data.status);
+                })
+                .catch(function(error) {
+                    console.error('停止监控失败:', error);
+                    showToast('提交停止监控请求失败，将在后台继续尝试停止', 'error');
+                    hideLoading();
+                    
+                    // 请求失败也启动检查序列
+                    checkMonitorStopStatus(phone, false);
+                });
+        }
+    });
+}
+
+/**
+ * 检查监控停止状态
+ * @param {string} phone - 用户手机号
+ * @param {boolean} initialSuccess - 初始请求是否成功
+ * @param {number} attempt - 当前尝试次数
+ */
+function checkMonitorStopStatus(phone, initialSuccess, attempt = 1) {
+    const maxAttempts = 3; // 最大检查次数
+    const initialDelay = 2000; // 初始延迟 (2秒)
+    
+    // 如果初始请求成功，显示成功消息，但仍然检查
+    if (attempt === 1 && initialSuccess) {
+        showToast('监控停止请求已发送', 'success');
+    }
+    
+    // 计算当前检查的延迟时间 (逐次增加)
+    const currentDelay = initialDelay * attempt;
+    
+    setTimeout(() => {
+        // 检查监控状态
+        axios.get('/api/monitors')
+            .then(function(response) {
+                if (response.data.status) {
+                    const monitors = response.data.monitors || [];
+                    const monitor = monitors.find(m => m.phone === phone);
+                    
+                    if (!monitor || !monitor.is_running) {
+                        // 监控已停止
+                        showToast('监控已成功停止', 'success');
+                        // 刷新监控状态表格
+                        renderMonitorTable(monitors);
+                    } else if (attempt < maxAttempts) {
+                        // 监控还在运行，继续检查
+                        console.log(`监控停止检查 (${attempt}/${maxAttempts}): 监控仍在运行`);
+                        checkMonitorStopStatus(phone, initialSuccess, attempt + 1);
+                    } else {
+                        // 达到最大检查次数，仍未停止
+                        showToast('监控可能需要更长时间停止，请稍后刷新页面查看最新状态', 'warning');
+                        // 强制刷新监控状态
+                        loadMonitors();
+                    }
+                } else {
+                    // API返回错误
+                    if (attempt < maxAttempts) {
+                        checkMonitorStopStatus(phone, initialSuccess, attempt + 1);
+                    } else {
+                        showToast('无法确认监控状态，请手动刷新页面', 'warning');
+                        // 强制刷新监控状态
+                        loadMonitors();
+                    }
+                }
+            })
+            .catch(function() {
+                // 请求出错
+                if (attempt < maxAttempts) {
+                    checkMonitorStopStatus(phone, initialSuccess, attempt + 1);
+                } else {
+                    showToast('检查监控状态失败，请手动刷新页面', 'error');
+                }
+            });
+    }, currentDelay);
+}
+
+/**
+ * 停止所有监控
+ */
+function stopAllMonitors() {
+    Swal.fire({
+        title: '停止所有监控',
+        text: '确定要停止所有正在运行的监控吗？',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: '确定停止全部',
+        cancelButtonText: '取消'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            showLoading('停止所有监控中...');
+            
+            // 发送请求
+            axios.post('/api/monitors/stop-all')
+                .then(function(response) {
+                    hideLoading();
+                    
+                    // 无论返回成功或失败，都启动检查序列
+                    checkAllMonitorsStopStatus(response.data.status);
+                })
+                .catch(function(error) {
+                    console.error('停止所有监控失败:', error);
+                    showToast('提交停止监控请求失败，将在后台继续尝试停止', 'error');
+                    hideLoading();
+                    
+                    // 请求失败也启动检查序列
+                    checkAllMonitorsStopStatus(false);
+                });
+        }
+    });
+}
+
+/**
+ * 检查所有监控停止状态
+ * @param {boolean} initialSuccess - 初始请求是否成功
+ * @param {number} attempt - 当前尝试次数
+ */
+function checkAllMonitorsStopStatus(initialSuccess, attempt = 1) {
+    const maxAttempts = 3; // 最大检查次数
+    const initialDelay = 2000; // 初始延迟 (2秒)
+    
+    // 如果初始请求成功，显示成功消息，但仍然检查
+    if (attempt === 1 && initialSuccess) {
+        showToast('监控停止请求已发送', 'success');
+    }
+    
+    // 计算当前检查的延迟时间 (逐次增加)
+    const currentDelay = initialDelay * attempt;
+    
+    setTimeout(() => {
+        // 检查监控状态
+        axios.get('/api/monitors')
+            .then(function(response) {
+                if (response.data.status) {
+                    const monitors = response.data.monitors || [];
+                    const runningMonitors = monitors.filter(m => m.is_running);
+                    
+                    if (runningMonitors.length === 0) {
+                        // 所有监控已停止
+                        showToast('所有监控已成功停止', 'success');
+                        // 刷新监控状态表格
+                        renderMonitorTable(monitors);
+                    } else if (attempt < maxAttempts) {
+                        // 还有监控在运行，继续检查
+                        console.log(`监控停止检查 (${attempt}/${maxAttempts}): 还有 ${runningMonitors.length} 个监控在运行`);
+                        checkAllMonitorsStopStatus(initialSuccess, attempt + 1);
+                    } else {
+                        // 达到最大检查次数，仍有监控未停止
+                        showToast(`尚有 ${runningMonitors.length} 个监控需要更长时间停止，请稍后刷新页面查看最新状态`, 'warning');
+                        // 强制刷新监控状态
+                        loadMonitors();
+                    }
+                } else {
+                    // API返回错误
+                    if (attempt < maxAttempts) {
+                        checkAllMonitorsStopStatus(initialSuccess, attempt + 1);
+                    } else {
+                        showToast('无法确认监控状态，请手动刷新页面', 'warning');
+                        // 强制刷新监控状态
+                        loadMonitors();
+                    }
+                }
+            })
+            .catch(function() {
+                // 请求出错
+                if (attempt < maxAttempts) {
+                    checkAllMonitorsStopStatus(initialSuccess, attempt + 1);
+                } else {
+                    showToast('检查监控状态失败，请手动刷新页面', 'error');
+                }
+            });
+    }, currentDelay);
 }

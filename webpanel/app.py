@@ -22,6 +22,7 @@ from utils.schedule_task import (
     get_schedule_tasks, get_task, create_task,
     update_task, delete_task, execute_task
 )
+
 # 导入监听签到模块
 from utils.monitor import (
     get_monitor_tasks, get_monitor_task, create_monitor_task,
@@ -756,6 +757,48 @@ def toggle_schedule(task_id):
 def health_check():
     """健康检查接口"""
     return jsonify({"status": True, "time": time.time()})
+
+# 监控管理 API
+@app.route('/api/monitors', methods=['GET'])
+@handle_errors
+def get_all_monitors():
+    """获取所有用户的监控状态"""
+    monitors = get_monitor_status()
+    return jsonify({"status": True, "monitors": monitors})
+
+@app.route('/api/monitors/<phone>', methods=['GET'])
+@handle_errors
+def get_monitor(phone):
+    """获取指定用户的监控状态"""
+    monitor = get_user_monitor_status(phone)
+    if not monitor:
+        return jsonify({"status": False, "message": f"未找到用户 {phone} 的监控状态"})
+    return jsonify({"status": True, "monitor": monitor})
+
+@app.route('/api/monitors/<phone>/start', methods=['POST'])
+@handle_errors
+def start_user_monitor(phone):
+    """启动指定用户的监控"""
+    data = request.json or {}
+    delay = int(data.get('delay', 0))
+    location_preset_index = data.get('location_preset_index')
+    
+    result = start_monitor(phone, delay, location_preset_index)
+    return jsonify(result)
+
+@app.route('/api/monitors/<phone>/stop', methods=['POST'])
+@handle_errors
+def stop_user_monitor(phone):
+    """停止指定用户的监控"""
+    result = stop_monitor(phone)
+    return jsonify({"status": result, "message": "监控已停止" if result else "停止监控失败"})
+
+@app.route('/api/monitors/stop-all', methods=['POST'])
+@handle_errors
+def stop_all_user_monitors():
+    """停止所有用户的监控"""
+    results = stop_all_monitors()
+    return jsonify({"status": True, "results": results})
 
 # 应用启动时的初始化
 def init_app():
