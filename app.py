@@ -15,12 +15,29 @@ import argparse
 import webbrowser
 from datetime import datetime
 
+# 加载环境变量
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    print("⚠️ 未安装python-dotenv，将使用默认配置")
+    print("建议运行: pip install python-dotenv")
+
+def get_env_config():
+    """获取环境变量配置"""
+    return {
+        'port': int(os.getenv('PORT', 5000)),
+        'open_browser': os.getenv('OPEN_BROWSER', 'true').lower() in ('true', '1', 'yes', 'on'),
+        'debug': os.getenv('DEBUG', 'false').lower() in ('true', '1', 'yes', 'on'),
+        'secret_key': os.getenv('SECRET_KEY', 'chaoxing-auto-sign-secret-key-2024'),
+        'log_level': os.getenv('LOG_LEVEL', 'INFO')
+    }
+
 def print_banner():
     """打印启动横幅"""
     print("╔═══════════════════════════════════════════════════════════════╗")
     print("║                超星学习通自动签到系统                          ║")
     print("║                    Web管理面板                                ║")
-    print("║  版本: v2.0   作者: Liqiu                                     ║")
     print(f"║  启动时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}                         ║")
     print("╚═══════════════════════════════════════════════════════════════╝")
 
@@ -115,8 +132,13 @@ def is_port_available(port):
     except:
         return False
 
-def find_available_port(start_port=5000):
+def find_available_port(start_port=None):
     """查找可用端口"""
+    # 如果没有指定起始端口，使用环境变量默认值
+    if start_port is None:
+        env_config = get_env_config()
+        start_port = env_config['port']
+    
     port = start_port
     while port < start_port + 10:
         if is_port_available(port):
@@ -135,11 +157,6 @@ def start_web_app(port, debug=False, open_browser=True):
         print("="*60)
         print(f"📱 本地访问: http://127.0.0.1:{port}")
         print(f"🌍 网络访问: http://0.0.0.0:{port}")
-        print("💡 功能模块:")
-        print("   • 用户管理: 添加、删除、管理签到用户")
-        print("   • 签到功能: 手动签到、批量签到")  
-        print("   • 系统监控: 实时状态、日志查看")
-        print("   • 定时任务: 自动签到调度")
         print("="*60)
         print("⚠️  使用Ctrl+C可以停止服务")
         print("="*60)
@@ -175,16 +192,24 @@ def start_web_app(port, debug=False, open_browser=True):
 
 def main():
     """主函数"""
+    # 获取环境变量配置
+    env_config = get_env_config()
+    
     parser = argparse.ArgumentParser(description="超星学习通自动签到系统 - 主启动脚本")
-    parser.add_argument('-p', '--port', type=int, default=0, help='指定端口，默认自动选择')
-    parser.add_argument('--debug', action='store_true', help='开启调试模式')
-    parser.add_argument('--no-browser', action='store_true', help='不自动打开浏览器')  
+    parser.add_argument('-p', '--port', type=int, default=0, help='指定端口，默认使用环境变量PORT或自动选择')
+    parser.add_argument('--debug', action='store_true', help='开启调试模式（覆盖环境变量）')
+    parser.add_argument('--no-browser', action='store_true', help='不自动打开浏览器（覆盖环境变量）')  
     parser.add_argument('--skip-check', action='store_true', help='跳过系统检查')
     
     args = parser.parse_args()
     
+    # 确定最终配置（命令行参数优先于环境变量）
+    final_port = args.port if args.port > 0 else env_config['port']
+    final_debug = args.debug or env_config['debug']
+    final_open_browser = not args.no_browser and env_config['open_browser']
+    
     # 设置调试模式
-    if args.debug:
+    if final_debug:
         from utils.debug import set_debug_mode
         set_debug_mode(True)
     
@@ -218,20 +243,26 @@ def main():
     ensure_directories()
     
     # 确定端口
-    if args.port > 0:
-        port = args.port
+    if final_port > 0:
+        port = final_port
         if not is_port_available(port):
             print(f"⚠️ 端口 {port} 不可用，自动选择其他端口...")
             port = find_available_port()
     else:
         port = find_available_port()
     
+    # 显示配置信息
+    print(f"\n📋 启动配置:")
+    print(f"   端口: {port}")
+    print(f"   调试模式: {'开启' if final_debug else '关闭'}")
+    print(f"   自动打开浏览器: {'开启' if final_open_browser else '关闭'}")
+    
     # 启动Web应用
     try:
         return start_web_app(
             port=port,
-            debug=args.debug,
-            open_browser=not args.no_browser
+            debug=final_debug,
+            open_browser=final_open_browser
         )
     except KeyboardInterrupt:
         print("\n\n👋 用户中断，正在关闭服务...")

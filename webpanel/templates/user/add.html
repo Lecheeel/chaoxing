@@ -172,7 +172,7 @@ $(document).ready(function() {
     });
 
     // 表单验证和提交
-    $('#addUserForm').submit(function(e) {
+    $('#addUserForm').submit(async function(e) {
         e.preventDefault();
         
         const phone = $('#phone').val().trim();
@@ -199,7 +199,8 @@ $(document).ready(function() {
         
         // 检查是否选择了默认位置（不推荐）
         if (default_location_id === 'default') {
-            if (!confirm('您选择了"默认位置"，这是一个不推荐的操作。\n\n默认位置可能导致签到失败或位置不准确。\n建议您先在位置管理中添加具体的位置信息。\n\n是否确认继续添加用户？')) {
+            const confirmed = await confirmDialog('您选择了"默认位置"，这是一个不推荐的操作。\n\n默认位置可能导致签到失败或位置不准确。\n建议您先在位置管理中添加具体的位置信息。\n\n是否确认继续添加用户？', '位置警告');
+            if (!confirmed) {
                 return;
             }
         }

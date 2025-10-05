@@ -14,8 +14,24 @@ from webpanel.blueprints.user import user_bp
 from webpanel.blueprints.system import system_bp
 from webpanel.blueprints.api import api_bp
 
+# 加载环境变量
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # 静默处理，因为不是所有环境都需要dotenv
+
 # 添加项目根目录到系统路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+def get_env_config():
+    """获取环境变量配置"""
+    return {
+        'secret_key': os.getenv('SECRET_KEY', 'chaoxing-auto-sign-secret-key-2024'),
+        'debug': os.getenv('DEBUG', 'false').lower() in ('true', '1', 'yes', 'on'),
+        'port': int(os.getenv('PORT', 5000)),
+        'log_level': os.getenv('LOG_LEVEL', 'INFO')
+    }
 
 # 确保日志目录存在
 if not os.path.exists('logs'):
@@ -25,7 +41,9 @@ if not os.path.exists('logs'):
 def setup_webapp_logging():
     """配置Web应用日志"""
     logger = logging.getLogger('webpanel')
-    logger.setLevel(logging.INFO)
+    # 从环境变量获取日志级别
+    log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
+    logger.setLevel(getattr(logging, log_level, logging.INFO))
     
     # 防止重复添加处理器
     if not logger.handlers:
@@ -51,7 +69,9 @@ def setup_webapp_logging():
 def setup_app_logging():
     """配置应用日志"""
     logger = logging.getLogger('app')
-    logger.setLevel(logging.INFO)
+    # 从环境变量获取日志级别
+    log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
+    logger.setLevel(getattr(logging, log_level, logging.INFO))
     
     # 防止重复添加处理器
     if not logger.handlers:
@@ -91,10 +111,13 @@ def create_app():
     """创建Flask应用实例"""
     app_logger.info("开始创建Flask应用实例")
     
+    # 获取环境变量配置
+    env_config = get_env_config()
+    
     app = Flask(__name__, 
                 template_folder='templates',
                 static_folder='static')
-    app.config['SECRET_KEY'] = 'chaoxing-auto-sign-secret-key-2024'
+    app.config['SECRET_KEY'] = env_config['secret_key']
     app.config['JSON_AS_ASCII'] = False  # 支持中文JSON输出
     
     # 注册蓝图
@@ -235,4 +258,16 @@ def update_all_user_cookies():
 app = create_app()
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000) 
+    # 获取环境变量配置
+    env_config = get_env_config()
+    
+    print(f"🌐 启动Web应用:")
+    print(f"   端口: {env_config['port']}")
+    print(f"   调试模式: {'开启' if env_config['debug'] else '关闭'}")
+    print(f"   访问地址: http://127.0.0.1:{env_config['port']}")
+    
+    app.run(
+        debug=env_config['debug'], 
+        host='0.0.0.0', 
+        port=env_config['port']
+    ) 

@@ -15,12 +15,32 @@ import platform
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
+# 加载环境变量
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    print("⚠️ 未安装python-dotenv，将使用默认配置")
+    print("建议运行: pip install python-dotenv")
+
 # 配置
 APP_NAME = "超星学习通自动签到系统"
 MAIN_SCRIPT = "webpanel/app.py"  # 主应用脚本
-CHECK_INTERVAL = 10  # 检查间隔(秒)
-MAX_RESTART_COUNT = 5  # 最大重启次数(每天)
 LOG_FILE = "logs/daemon.log"  # 守护进程日志
+
+def get_env_config():
+    """获取环境变量配置"""
+    return {
+        'port': int(os.getenv('PORT', 5000)),
+        'check_interval': int(os.getenv('DAEMON_CHECK_INTERVAL', 10)),
+        'max_restart': int(os.getenv('DAEMON_MAX_RESTART', 5)),
+        'debug': os.getenv('DEBUG', 'false').lower() in ('true', '1', 'yes', 'on')
+    }
+
+# 从环境变量获取配置
+env_config = get_env_config()
+CHECK_INTERVAL = env_config['check_interval']
+MAX_RESTART_COUNT = env_config['max_restart']
 
 # 检测操作系统
 IS_WINDOWS = platform.system() == 'Windows'
@@ -32,7 +52,9 @@ if not os.path.exists('logs'):
 # 配置日志
 def setup_logging():
     logger = logging.getLogger('daemon')
-    logger.setLevel(logging.INFO)
+    # 从环境变量获取日志级别
+    log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
+    logger.setLevel(getattr(logging, log_level, logging.INFO))
     
     # 防止重复添加处理器
     if not logger.handlers:
@@ -115,9 +137,13 @@ def check_process_cpu_memory(pid):
     except:
         return None, None
 
-def start_app(port=5000):
+def start_app(port=None):
     """启动应用进程"""
     global app_process
+    
+    # 如果没有指定端口，使用环境变量默认值
+    if port is None:
+        port = env_config['port']
     
     logger.info(f"正在启动 {APP_NAME}...")
     
@@ -182,9 +208,13 @@ def monitor_app_log():
     
     logger.info("应用日志监控线程已退出")
 
-def restart_app(port=5000):
+def restart_app(port=None):
     """重启应用进程"""
     global app_process, restart_count, last_restart_day
+    
+    # 如果没有指定端口，使用环境变量默认值
+    if port is None:
+        port = env_config['port']
     
     # 检查并重置每日重启计数
     current_day = get_current_day()
@@ -241,9 +271,13 @@ def restart_app(port=5000):
     # 启动新进程
     return start_app(port)
 
-def monitor_app(port=5000):
+def monitor_app(port=None):
     """主监控循环，检查应用进程状态并在需要时重启"""
     global app_process, last_restart_day
+    
+    # 如果没有指定端口，使用环境变量默认值
+    if port is None:
+        port = env_config['port']
     
     # 初始化每日重启计数
     last_restart_day = get_current_day()
@@ -307,11 +341,17 @@ def check_dependencies():
 
 def main():
     """主函数，解析命令行参数并启动守护进程"""
+    # 获取环境变量配置
+    env_config = get_env_config()
+    
     parser = argparse.ArgumentParser(description=f'{APP_NAME} 守护进程')
-    parser.add_argument('-p', '--port', type=int, default=5000, help='应用监听端口，默认5000')
+    parser.add_argument('-p', '--port', type=int, default=0, help='应用监听端口，默认使用环境变量PORT')
     parser.add_argument('-d', '--detach', action='store_true', help='后台运行')
     
     args = parser.parse_args()
+    
+    # 确定最终端口（命令行参数优先于环境变量）
+    final_port = args.port if args.port > 0 else env_config['port']
     
     # 检查依赖
     if not check_dependencies():
@@ -326,16 +366,19 @@ def main():
     print(f"🚀 {APP_NAME} - 守护进程模式")
     print("=" * 60)
     print(f"📟 操作系统: {platform.system()} {platform.release()}")
-    print(f"🌐 监听端口: {args.port}")
+    print(f"🌐 监听端口: {final_port}")
     print(f"🔧 进程ID: {os.getpid()}")
-    print(f"📱 访问地址: http://127.0.0.1:{args.port}")
+    print(f"📱 访问地址: http://127.0.0.1:{final_port}")
     print(f"📁 日志文件: {LOG_FILE}")
+    print(f"🔄 检查间隔: {CHECK_INTERVAL}秒")
+    print(f"🔄 最大重启次数: {MAX_RESTART_COUNT}次/天")
     print("=" * 60)
     
     logger.info("=" * 50)
     logger.info(f"{APP_NAME} 守护进程启动")
     logger.info(f"操作系统: {platform.system()} {platform.release()}")
-    logger.info(f"端口: {args.port}, 进程ID: {os.getpid()}")
+    logger.info(f"端口: {final_port}, 进程ID: {os.getpid()}")
+    logger.info(f"检查间隔: {CHECK_INTERVAL}秒, 最大重启次数: {MAX_RESTART_COUNT}次/天")
     logger.info("=" * 50)
     
     # 如果需要后台运行，将进程分离 (仅支持非Windows系统)
@@ -360,7 +403,7 @@ def main():
     
     # 启动监控
     try:
-        monitor_app(args.port)
+        monitor_app(final_port)
     except KeyboardInterrupt:
         logger.info("收到键盘中断，退出守护进程")
         print("\n👋 守护进程已停止")

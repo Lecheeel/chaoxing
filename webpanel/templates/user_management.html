@@ -10,7 +10,7 @@
                 <h2 class="page-title">
                     <i class="fas fa-users me-2"></i>用户管理
                 </h2>
-                <a href="http://127.0.0.1:5000/user/add" class="btn btn-primary">
+                <a href="{{ url_for('user.add') }}" class="btn btn-primary">
                     <i class="fas fa-plus me-2"></i>添加用户
                 </a>
             </div>
@@ -478,7 +478,7 @@ function updateBatchButtons() {
 
 // 添加用户（跳转到专门的添加页面）
 function addUser() {
-    window.location.href = 'http://127.0.0.1:5000/user/add';
+    window.location.href = '{{ url_for("user.add") }}';
 }
 
 // 编辑用户

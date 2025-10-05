@@ -30,7 +30,9 @@ def setup_scheduler_logging():
     ensure_log_dir()
     
     logger = logging.getLogger('scheduler')
-    logger.setLevel(logging.INFO)
+    # 从环境变量获取日志级别
+    log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
+    logger.setLevel(getattr(logging, log_level, logging.INFO))
     
     # 防止重复添加处理器
     if not logger.handlers:
