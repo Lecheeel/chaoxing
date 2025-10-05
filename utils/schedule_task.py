@@ -166,18 +166,20 @@ def get_scheduler_status():
 def register_task(task):
     """注册一个定时任务到调度器"""
     task_id = task.get('id')
-    task_type = task.get('type')
+    task_type = task.get('type')  # sign 或 cookie_update
+    task_mode = task.get('mode')  # daily, weekly, interval
     task_name = task.get('name', f'任务{task_id}')
     
     try:
-        if task_type == 'daily':
+        if task_mode == 'daily':
             # 每日固定时间执行
             time_str = task.get('time')
             if time_str:
                 job = schedule.every().day.at(time_str).do(execute_task, task_id=task_id)
-                log_scheduler_event(f"已注册每日任务: {task_name} (ID: {task_id}), 时间: {time_str}")
+                type_text = "签到" if task_type == 'sign' else "Cookie更新"
+                log_scheduler_event(f"已注册每日{type_text}任务: {task_name} (ID: {task_id}), 时间: {time_str}")
         
-        elif task_type == 'weekly':
+        elif task_mode == 'weekly':
             # 每周固定时间执行
             time_str = task.get('time')
             days = task.get('days', [])
@@ -208,11 +210,12 @@ def register_task(task):
                         days_names.append("周日")
                 
                 days_str = ", ".join(days_names)
-                log_scheduler_event(f"已注册每周任务: {task_name} (ID: {task_id}), 时间: {time_str}, 日期: {days_str}")
+                type_text = "签到" if task_type == 'sign' else "Cookie更新"
+                log_scheduler_event(f"已注册每周{type_text}任务: {task_name} (ID: {task_id}), 时间: {time_str}, 日期: {days_str}")
         
-        elif task_type == 'interval':
+        elif task_mode == 'interval':
             # 间隔执行任务
-            interval = task.get('interval', 3600)  # 默认1小时
+            interval = int(task.get('interval', 3600))  # 默认1小时，确保是整数
             unit = task.get('unit', 'seconds')
             
             if unit == 'minutes':
@@ -221,17 +224,16 @@ def register_task(task):
             elif unit == 'hours':
                 job = schedule.every(interval).hours.do(execute_task, task_id=task_id)
                 unit_str = "小时"
+            elif unit == 'days':
+                job = schedule.every(interval).days.do(execute_task, task_id=task_id)
+                unit_str = "天"
             else:  # seconds
                 job = schedule.every(interval).seconds.do(execute_task, task_id=task_id)
                 unit_str = "秒"
             
-            log_scheduler_event(f"已注册间隔任务: {task_name} (ID: {task_id}), 间隔: {interval} {unit_str}")
+            type_text = "签到" if task_type == 'sign' else "Cookie更新"
+            log_scheduler_event(f"已注册间隔{type_text}任务: {task_name} (ID: {task_id}), 间隔: {interval} {unit_str}")
         
-        elif task_type == 'cookie_update':
-            # Cookie更新任务
-            interval = task.get('interval', 21)  # 默认21天
-            job = schedule.every(interval).days.do(execute_task, task_id=task_id)
-            log_scheduler_event(f"已注册Cookie更新任务: {task_name} (ID: {task_id}), 间隔: {interval} 天")
     except Exception as e:
         error_msg = f"注册任务 {task_name} (ID: {task_id}) 失败: {str(e)}"
         log_scheduler_event(error_msg, 'error')
@@ -280,7 +282,7 @@ def execute_task(task_id):
         update_schedule_task(task_id, task)
         
         return result
-    else:
+    elif task_type == 'sign':
         # 原有的签到任务处理逻辑
         user_type = task.get('user_type', 'phone')
         user_ids = task.get('user_ids', [])
@@ -359,7 +361,7 @@ def execute_task(task_id):
                     failed_count += 1
                     continue
                 
-                if user_type == 'phone':
+                if user_type in ['phone', 'all']:
                     # 获取用户信息，检查是否有预设位置
                     user_has_location = False
                     
@@ -489,6 +491,21 @@ def create_task(task_data):
     # 设置任务ID
     task_data['id'] = new_id
     
+    # 处理签到任务的用户选择
+    if task_data.get('type') == 'sign':
+        user_type = task_data.get('user_type', 'phone')
+        user_ids = task_data.get('user_ids', [])
+        
+        # 如果是全部用户，设置user_type为'all'
+        if user_type == 'all' or (user_ids and 'all' in user_ids):
+            task_data['user_type'] = 'all'
+            task_data['user_ids'] = ['all']
+        else:
+            # 确保user_ids是列表
+            if not isinstance(user_ids, list):
+                user_ids = [user_ids] if user_ids else []
+            task_data['user_ids'] = user_ids
+    
     # 添加创建时间
     task_data['created_at'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     
@@ -509,6 +526,21 @@ def update_task(task_id, task_data):
     # 确保task_data中的id也是整数
     if 'id' in task_data:
         task_data['id'] = int(task_data['id'])
+    
+    # 处理签到任务的用户选择
+    if task_data.get('type') == 'sign':
+        user_type = task_data.get('user_type', 'phone')
+        user_ids = task_data.get('user_ids', [])
+        
+        # 如果是全部用户，设置user_type为'all'
+        if user_type == 'all' or (user_ids and 'all' in user_ids):
+            task_data['user_type'] = 'all'
+            task_data['user_ids'] = ['all']
+        else:
+            # 确保user_ids是列表
+            if not isinstance(user_ids, list):
+                user_ids = [user_ids] if user_ids else []
+            task_data['user_ids'] = user_ids
     
     result = update_schedule_task(task_id, task_data)
     if result:

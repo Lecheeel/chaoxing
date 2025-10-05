@@ -1,0 +1,885 @@
+{% extends "base.html" %}
+
+{% block title %}用户管理{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2 class="page-title">
+                    <i class="fas fa-users me-2"></i>用户管理
+                </h2>
+                <a href="http://127.0.0.1:5000/user/add" class="btn btn-primary">
+                    <i class="fas fa-plus me-2"></i>添加用户
+                </a>
+            </div>
+            
+
+        </div>
+    </div>
+
+    <!-- 用户统计卡片 -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title">总用户数</h6>
+                            <h3 id="totalUsers">-</h3>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-users fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title">活跃用户</h6>
+                            <h3 id="activeUsers">-</h3>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-user-check fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title">今日签到</h6>
+                            <h3 id="todaySignins">-</h3>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-calendar-check fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title">成功率</h6>
+                            <h3 id="successRate">-</h3>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-chart-line fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 搜索和过滤 -->
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <div class="input-group">
+                <span class="input-group-text"><i class="fas fa-search"></i></span>
+                <input type="text" class="form-control" id="searchInput" placeholder="搜索用户手机号、姓名...">
+            </div>
+        </div>
+        <div class="col-md-3">
+            <select class="form-select" id="statusFilter">
+                <option value="">全部状态</option>
+                <option value="active">活跃</option>
+                <option value="inactive">非活跃</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <button class="btn btn-outline-secondary" onclick="refreshUserList()">
+                <i class="fas fa-sync-alt me-2"></i>刷新
+            </button>
+        </div>
+    </div>
+
+    <!-- 用户列表表格 -->
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th><input type="checkbox" id="selectAll"></th>
+                            <th>手机号</th>
+                            <th>姓名</th>
+                            <th>状态</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="userTableBody">
+                        <tr>
+                            <td colspan="5" class="text-center">
+                                <div class="spinner-border" role="status">
+                                    <span class="visually-hidden">加载中...</span>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 分页 -->
+            <nav aria-label="用户列表分页">
+                <ul class="pagination justify-content-center" id="pagination">
+                    <!-- 分页将通过JavaScript动态生成 -->
+                </ul>
+            </nav>
+        </div>
+    </div>
+
+    <!-- 批量操作 -->
+    <div class="row mt-3">
+        <div class="col-12">
+            <div class="btn-group" role="group">
+                <button type="button" class="btn btn-outline-danger" onclick="batchDeleteUsers()" disabled id="batchDeleteBtn">
+                    <i class="fas fa-trash me-2"></i>批量删除
+                </button>
+                <button type="button" class="btn btn-outline-warning" onclick="batchDisableUsers()" disabled id="batchDisableBtn">
+                    <i class="fas fa-user-slash me-2"></i>批量禁用
+                </button>
+                <button type="button" class="btn btn-outline-success" onclick="batchEnableUsers()" disabled id="batchEnableBtn">
+                    <i class="fas fa-user-check me-2"></i>批量启用
+                </button>
+                <button type="button" class="btn btn-outline-warning" onclick="batchRefreshCookies()" disabled id="batchRefreshBtn">
+                    <i class="fas fa-sync-alt me-2"></i>批量刷新Cookie
+                </button>
+                <button type="button" class="btn btn-outline-info" onclick="refreshAllCookies()" id="refreshAllBtn">
+                    <i class="fas fa-sync me-2"></i>刷新全部Cookie
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+<!-- 编辑用户模态框 -->
+<div class="modal fade" id="editUserModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">编辑用户</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editUserForm">
+                    <input type="hidden" id="editUserId">
+                    <div class="mb-3">
+                        <label for="editPhoneNumber" class="form-label">手机号</label>
+                        <input type="tel" class="form-control" id="editPhoneNumber" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editUsername" class="form-label">用户名</label>
+                        <input type="text" class="form-control" id="editUsername" readonly>
+                        <div class="form-text">用户名由系统自动获取，不可修改</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editPassword" class="form-label">密码</label>
+                        <input type="password" class="form-control" id="editPassword" placeholder="留空表示不修改">
+                    </div>
+                    <div class="mb-3">
+                        <label for="editDefaultLocation" class="form-label">
+                            <i class="fas fa-map-marker-alt me-1"></i>默认签到位置
+                        </label>
+                        <select class="form-select" id="editDefaultLocation" name="editDefaultLocationId">
+                            <option value="">请选择默认签到位置</option>
+                            <option value="default">默认位置（不推荐）</option>
+                            <!-- 位置选项将通过JavaScript动态加载 -->
+                        </select>
+                        <div class="form-text">选择该用户进行签到时的默认位置</div>
+                        <div id="editLocationWarning" class="alert alert-warning mt-2" style="display: none;" role="alert">
+                            <i class="fas fa-exclamation-triangle me-1"></i>
+                            <strong>警告：</strong>您选择了默认位置，这可能导致签到失败或位置不准确。
+                            建议选择已配置的具体位置。
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="editAutoSignin">
+                            <label class="form-check-label" for="editAutoSignin">
+                                自动签到
+                            </label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="updateUser()">保存修改</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+console.log('=== 用户管理页面脚本开始执行 ===');
+
+// 全局变量
+let locations = [];
+
+$(document).ready(function() {
+    console.log('用户管理页面JavaScript已加载');
+    
+    // 加载位置列表
+    loadLocations();
+    
+    // 确保必要的函数存在
+    if (typeof showToast === 'undefined') {
+        console.error('showToast函数未定义');
+        // 提供一个简单的fallback，使用自定义alertDialog
+        window.showToast = function(message, type) {
+            console.log(type + ': ' + message);
+            if (typeof alertDialog === 'function') {
+                alertDialog(message, '提示', type === 'error' ? 'error' : 'info');
+            } else {
+                // 最后的fallback
+                console.error('alertDialog函数也未定义，请检查app.js是否正确加载');
+            }
+        };
+    }
+    
+    // 延迟加载数据，确保DOM完全准备好
+    setTimeout(function() {
+        console.log('开始加载用户数据...');
+        console.log('jQuery版本:', $.fn.jquery);
+        console.log('当前URL:', window.location.href);
+        console.log('DOM元素检查:');
+        console.log('- totalUsers元素:', $('#totalUsers').length);
+        console.log('- userTableBody元素:', $('#userTableBody').length);
+        console.log('- searchInput元素:', $('#searchInput').length);
+        
+        loadUserStats();
+        loadUserList();
+    }, 100);
+    
+    // 搜索功能
+    $('#searchInput').on('input', function() {
+        console.log('搜索输入变化，重新加载列表');
+        loadUserList();
+    });
+    
+    // 状态过滤
+    $('#statusFilter').on('change', function() {
+        console.log('状态过滤变化，重新加载列表');
+        loadUserList();
+    });
+    
+    // 全选功能
+    $('#selectAll').on('change', function() {
+        const isChecked = $(this).prop('checked');
+        $('.user-checkbox').prop('checked', isChecked);
+        updateBatchButtons();
+    });
+    
+    // 单选功能
+    $(document).on('change', '.user-checkbox', function() {
+        updateBatchButtons();
+    });
+});
+
+// 加载用户统计
+function loadUserStats() {
+    console.log('开始请求用户统计API...');
+    $.get('/user/api/stats')
+        .done(function(response) {
+            console.log('用户统计API响应:', response);
+            if (response.success) {
+                const stats = response.data;
+                $('#totalUsers').text(stats.total || 0);
+                $('#activeUsers').text(stats.active || 0);
+                $('#todaySignins').text(stats.today_signins || 0);
+                $('#successRate').text((stats.success_rate || 0) + '%');
+                console.log('用户统计数据已更新');
+            } else {
+                console.error('用户统计API返回失败:', response.message);
+                // 提供fallback显示
+                $('#totalUsers').text('0');
+                $('#activeUsers').text('0');
+                $('#todaySignins').text('0');
+                $('#successRate').text('0%');
+                if (typeof showToast === 'function') {
+                    showToast('获取用户统计失败: ' + response.message, 'error');
+                }
+            }
+        })
+        .fail(function(xhr, status, error) {
+            console.error('用户统计API请求失败:', error, 'status:', status, 'xhr:', xhr);
+            // 提供fallback显示
+            $('#totalUsers').text('0');
+            $('#activeUsers').text('0');
+            $('#todaySignins').text('0');
+            $('#successRate').text('0%');
+            if (typeof showToast === 'function') {
+                showToast('获取用户统计失败', 'error');
+            }
+        });
+}
+
+// 加载用户列表
+function loadUserList(page = 1) {
+    console.log('开始请求用户列表API, 页码:', page);
+    const search = $('#searchInput').val() || '';
+    const status = $('#statusFilter').val() || '';
+    
+    const params = {
+        page: page,
+        per_page: 10
+    };
+    
+    // 只有在有值时才添加搜索和状态参数
+    if (search) {
+        params.search = search;
+    }
+    if (status) {
+        params.status = status;
+    }
+    
+    console.log('请求参数:', params);
+    
+    $.get('/user/api/list', params)
+        .done(function(response) {
+            console.log('用户列表API响应:', response);
+            if (response.success && response.data) {
+                renderUserTable(response.data.users || []);
+                renderPagination(response.data.pagination || {current_page: 1, total_pages: 1, total_items: 0, per_page: 10});
+                console.log('用户列表渲染完成');
+            } else {
+                console.error('用户列表API返回失败:', response.message || '未知错误');
+                renderUserTable([]);
+                renderPagination({current_page: 1, total_pages: 1, total_items: 0, per_page: 10});
+                if (typeof showToast === 'function') {
+                    showToast('加载用户列表失败: ' + (response.message || '未知错误'), 'error');
+                }
+            }
+        })
+        .fail(function(xhr, status, error) {
+            console.error('用户列表API请求失败:', error, 'status:', status, 'xhr:', xhr);
+            console.error('响应文本:', xhr.responseText);
+            renderUserTable([]);
+            renderPagination({current_page: 1, total_pages: 1, total_items: 0, per_page: 10});
+            if (typeof showToast === 'function') {
+                showToast('加载用户列表失败: 网络错误', 'error');
+            }
+        });
+}
+
+// 渲染用户表格
+function renderUserTable(users) {
+    console.log('开始渲染用户表格，用户数量:', users ? users.length : 0);
+    const tbody = $('#userTableBody');
+    tbody.empty();
+    
+    if (!users || users.length === 0) {
+        tbody.append('<tr><td colspan="5" class="text-center text-muted">暂无用户数据</td></tr>');
+        console.log('用户表格渲染完成：无数据');
+        return;
+    }
+    
+    users.forEach((user, index) => {
+        console.log(`渲染用户 ${index + 1}:`, user);
+        const isActive = user.status === 'active';
+        const switchId = `autoLoginSwitch_${user.phone}`;
+        
+        // 获取默认位置信息
+        const defaultLocation = getUserDefaultLocation(user.default_location_id);
+        
+        const row = `
+            <tr>
+                <td><input type="checkbox" class="user-checkbox" value="${user.phone || ''}"></td>
+                <td>${user.phone || '-'}</td>
+                <td>${user.name || '-'}</td>
+                <td>
+                    <span class="badge bg-${isActive ? 'success' : 'secondary'}">
+                        ${isActive ? '活跃' : '非活跃'}
+                    </span>
+                </td>
+                <td>
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="${switchId}" 
+                                   ${isActive ? 'checked' : ''} 
+                                   onchange="toggleAutoSignin('${user.phone}', this.checked)">
+                            <label class="form-check-label" for="${switchId}">
+                                <small>自动签到</small>
+                            </label>
+                        </div>
+                        <div class="btn-group btn-group-sm">
+                            <button type="button" class="btn btn-outline-primary" onclick="editUser('${user.phone || ''}')" 
+                                    title="编辑用户">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button type="button" class="btn btn-outline-warning" onclick="refreshUserCookie('${user.phone || ''}')" 
+                                    title="刷新Cookie">
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
+                            <button type="button" class="btn btn-outline-danger" onclick="deleteUser('${user.phone || ''}')" 
+                                    title="删除用户">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                </td>
+            </tr>
+        `;
+        tbody.append(row);
+    });
+    console.log('用户表格渲染完成：', users.length, '个用户');
+}
+
+// 渲染分页
+function renderPagination(pagination) {
+    const nav = $('#pagination');
+    nav.empty();
+    
+    if (pagination.total_pages <= 1) return;
+    
+    // 上一页
+    if (pagination.current_page > 1) {
+        nav.append(`<li class="page-item"><a class="page-link" href="#" onclick="loadUserList(${pagination.current_page - 1})">上一页</a></li>`);
+    }
+    
+    // 页码
+    for (let i = 1; i <= pagination.total_pages; i++) {
+        if (i === pagination.current_page) {
+            nav.append(`<li class="page-item active"><span class="page-link">${i}</span></li>`);
+        } else {
+            nav.append(`<li class="page-item"><a class="page-link" href="#" onclick="loadUserList(${i})">${i}</a></li>`);
+        }
+    }
+    
+    // 下一页
+    if (pagination.current_page < pagination.total_pages) {
+        nav.append(`<li class="page-item"><a class="page-link" href="#" onclick="loadUserList(${pagination.current_page + 1})">下一页</a></li>`);
+    }
+}
+
+// 更新批量操作按钮状态
+function updateBatchButtons() {
+    const checkedBoxes = $('.user-checkbox:checked');
+    const hasSelection = checkedBoxes.length > 0;
+    
+    $('#batchDeleteBtn, #batchDisableBtn, #batchEnableBtn, #batchRefreshBtn').prop('disabled', !hasSelection);
+}
+
+// 添加用户（跳转到专门的添加页面）
+function addUser() {
+    window.location.href = 'http://127.0.0.1:5000/user/add';
+}
+
+// 编辑用户
+function editUser(phone) {
+    $.get('/user/api/get', {phone: phone}, function(response) {
+        if (response.success) {
+            const user = response.data;
+            $('#editUserId').val(user.phone);
+            $('#editPhoneNumber').val(user.phone);
+            $('#editUsername').val(user.username || '未知用户');
+            $('#editAutoSignin').prop('checked', user.auto_login || false);
+            
+            // 设置默认位置
+            const defaultLocationId = user.default_location_id;
+            if (defaultLocationId) {
+                $('#editDefaultLocation').val(defaultLocationId);
+            } else {
+                $('#editDefaultLocation').val('');
+            }
+            
+            $('#editUserModal').modal('show');
+        } else {
+            showToast('获取用户信息失败: ' + response.message, 'error');
+        }
+    }).fail(function() {
+        showToast('获取用户信息失败', 'error');
+    });
+}
+
+// 处理编辑用户模态框中位置选择的变化
+$(document).on('change', '#editDefaultLocation', function() {
+    const selectedValue = $(this).val();
+    const warningDiv = $('#editLocationWarning');
+    
+    if (selectedValue === 'default') {
+        warningDiv.show();
+    } else {
+        warningDiv.hide();
+    }
+});
+
+// 更新用户
+function updateUser() {
+    const formData = {
+        phone: $('#editUserId').val(),
+        password: $('#editPassword').val() || undefined,
+        auto_login: $('#editAutoSignin').prop('checked'),
+        default_location_id: $('#editDefaultLocation').val() || null
+    };
+    
+    $.ajax({
+        url: '/user/api/update',
+        method: 'PUT',
+        contentType: 'application/json',
+        data: JSON.stringify(formData),
+        success: function(response) {
+            if (response.success) {
+                showToast('用户更新成功', 'success');
+                $('#editUserModal').modal('hide');
+                loadUserList();
+            } else {
+                showToast('更新用户失败: ' + response.message, 'error');
+            }
+        },
+        error: function() {
+            showToast('更新用户失败', 'error');
+        }
+    });
+}
+
+// 删除用户
+async function deleteUser(phone) {
+    const confirmed = await confirmDialog('确定要删除该用户吗？此操作不可恢复。', '删除用户');
+    if (!confirmed) {
+        return;
+    }
+    
+    $.ajax({
+        url: '/user/api/delete',
+        method: 'DELETE',
+        contentType: 'application/json',
+        data: JSON.stringify({phone: phone}),
+        success: function(response) {
+            if (response.success) {
+                showToast('用户删除成功', 'success');
+                loadUserList();
+                loadUserStats();
+            } else {
+                showToast('删除用户失败: ' + response.message, 'error');
+            }
+        },
+        error: function() {
+            showToast('删除用户失败', 'error');
+        }
+    });
+}
+
+// 切换用户自动签到状态
+function toggleAutoSignin(phone, isChecked) {
+    $.ajax({
+        url: '/user/api/toggle_status',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            phone: phone
+        }),
+        success: function(response) {
+            if (response.success) {
+                showToast(response.message || '状态切换成功', 'success');
+                // 更新状态显示
+                const statusBadge = $(`#autoLoginSwitch_${phone}`).closest('tr').find('.badge');
+                if (isChecked) {
+                    statusBadge.removeClass('bg-secondary').addClass('bg-success').text('活跃');
+                } else {
+                    statusBadge.removeClass('bg-success').addClass('bg-secondary').text('非活跃');
+                }
+                // 刷新统计数据
+                loadUserStats();
+            } else {
+                showToast('状态切换失败: ' + response.message, 'error');
+                // 恢复开关状态
+                $(`#autoLoginSwitch_${phone}`).prop('checked', !isChecked);
+            }
+        },
+        error: function() {
+            showToast('状态切换失败', 'error');
+            // 恢复开关状态
+            $(`#autoLoginSwitch_${phone}`).prop('checked', !isChecked);
+        }
+    });
+}
+
+// 批量删除用户
+async function batchDeleteUsers() {
+    const selectedUsers = $('.user-checkbox:checked').map(function() {
+        return $(this).val();
+    }).get();
+    
+    if (selectedUsers.length === 0) return;
+    
+    const confirmed = await confirmDialog(`确定要删除选中的 ${selectedUsers.length} 个用户吗？此操作不可恢复。`, '批量删除用户');
+    if (!confirmed) {
+        return;
+    }
+    
+    $.ajax({
+        url: '/user/api/batch_delete',
+        method: 'DELETE',
+        contentType: 'application/json',
+        data: JSON.stringify({phones: selectedUsers}),
+        success: function(response) {
+            if (response.success) {
+                showToast(`成功删除 ${selectedUsers.length} 个用户`, 'success');
+                loadUserList();
+                loadUserStats();
+                $('#selectAll').prop('checked', false);
+            } else {
+                showToast('批量删除失败: ' + response.message, 'error');
+            }
+        },
+        error: function() {
+            showToast('批量删除失败', 'error');
+        }
+    });
+}
+
+// 批量禁用用户
+function batchDisableUsers() {
+    const selectedUsers = $('.user-checkbox:checked').map(function() {
+        return $(this).val();
+    }).get();
+    
+    if (selectedUsers.length === 0) return;
+    
+    $.ajax({
+        url: '/user/api/batch_disable',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({phones: selectedUsers}),
+        success: function(response) {
+            if (response.success) {
+                showToast(`成功禁用 ${selectedUsers.length} 个用户`, 'success');
+                loadUserList();
+            } else {
+                showToast('批量禁用失败: ' + response.message, 'error');
+            }
+        },
+        error: function() {
+            showToast('批量禁用失败', 'error');
+        }
+    });
+}
+
+// 批量启用用户
+function batchEnableUsers() {
+    const selectedUsers = $('.user-checkbox:checked').map(function() {
+        return $(this).val();
+    }).get();
+    
+    if (selectedUsers.length === 0) return;
+    
+    $.ajax({
+        url: '/user/api/batch_enable',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({phones: selectedUsers}),
+        success: function(response) {
+            if (response.success) {
+                showToast(`成功启用 ${selectedUsers.length} 个用户`, 'success');
+                loadUserList();
+            } else {
+                showToast('批量启用失败: ' + response.message, 'error');
+            }
+        },
+        error: function() {
+            showToast('批量启用失败', 'error');
+        }
+    });
+}
+
+// 刷新用户列表
+function refreshUserList() {
+    loadUserList();
+    loadUserStats();
+    showToast('用户列表已刷新', 'success');
+}
+
+// 刷新单个用户的Cookie
+async function refreshUserCookie(phone) {
+    const confirmed = await confirmDialog(`确定要刷新用户 ${phone} 的Cookie吗？此操作将重新登录获取新的认证信息。`, '刷新Cookie');
+    if (!confirmed) {
+        return;
+    }
+    
+    // 显示加载状态
+    const refreshBtn = $(`button[onclick="refreshUserCookie('${phone}')"]`);
+    const originalHtml = refreshBtn.html();
+    refreshBtn.html('<i class="fas fa-spinner fa-spin me-2"></i>刷新中...').prop('disabled', true);
+    
+    $.ajax({
+        url: '/user/api/refresh_cookie',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({phone: phone}),
+        success: function(response) {
+            if (response.success) {
+                showToast(`用户 ${phone} 的Cookie刷新成功`, 'success');
+                loadUserList(); // 刷新用户列表
+            } else {
+                showToast(`刷新失败: ${response.message}`, 'error');
+            }
+        },
+        error: function() {
+            showToast('刷新Cookie失败', 'error');
+        },
+        complete: function() {
+            // 恢复按钮状态
+            refreshBtn.html(originalHtml).prop('disabled', false);
+        }
+    });
+}
+
+// 批量刷新Cookie
+async function batchRefreshCookies() {
+    const selectedUsers = $('.user-checkbox:checked').map(function() {
+        return $(this).val();
+    }).get();
+    
+    if (selectedUsers.length === 0) return;
+    
+    const confirmed = await confirmDialog(`确定要刷新选中的 ${selectedUsers.length} 个用户的Cookie吗？此操作将重新登录获取新的认证信息。`, '批量刷新Cookie');
+    if (!confirmed) {
+        return;
+    }
+    
+    // 显示加载状态
+    const batchBtn = $('#batchRefreshBtn');
+    const originalHtml = batchBtn.html();
+    batchBtn.html('<i class="fas fa-spinner fa-spin me-2"></i>批量刷新中...').prop('disabled', true);
+    
+    $.ajax({
+        url: '/user/api/batch_refresh_cookies',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({phones: selectedUsers}),
+        success: function(response) {
+            if (response.success) {
+                showToast(`成功刷新 ${response.data.success_count || 0} 个用户的Cookie`, 'success');
+                if (response.data.failed_count > 0) {
+                    showToast(`${response.data.failed_count} 个用户刷新失败`, 'warning');
+                }
+                loadUserList(); // 刷新用户列表
+            } else {
+                showToast('批量刷新失败: ' + response.message, 'error');
+            }
+        },
+        error: function() {
+            showToast('批量刷新Cookie失败', 'error');
+        },
+        complete: function() {
+            // 恢复按钮状态
+            batchBtn.html(originalHtml).prop('disabled', false);
+        }
+    });
+}
+
+// 刷新全部用户Cookie
+async function refreshAllCookies() {
+    const confirmed = await confirmDialog('确定要刷新所有用户的Cookie吗？此操作将重新登录获取新的认证信息，可能需要较长时间。', '刷新全部Cookie');
+    if (!confirmed) {
+        return;
+    }
+    
+    // 显示加载状态
+    const refreshAllBtn = $('#refreshAllBtn');
+    const originalHtml = refreshAllBtn.html();
+    refreshAllBtn.html('<i class="fas fa-spinner fa-spin me-2"></i>全部刷新中...').prop('disabled', true);
+    
+    $.ajax({
+        url: '/user/api/refresh_all_cookies',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({}),
+        success: function(response) {
+            if (response.success) {
+                showToast(`成功刷新 ${response.data.success_count || 0} 个用户的Cookie`, 'success');
+                if (response.data.failed_count > 0) {
+                    showToast(`${response.data.failed_count} 个用户刷新失败`, 'warning');
+                }
+                loadUserList(); // 刷新用户列表
+            } else {
+                showToast('全部刷新失败: ' + response.message, 'error');
+            }
+        },
+        error: function() {
+            showToast('全部刷新Cookie失败', 'error');
+        },
+        complete: function() {
+            // 恢复按钮状态
+            refreshAllBtn.html(originalHtml).prop('disabled', false);
+        }
+    });
+}
+
+// 立即测试脚本是否加载
+// 加载位置列表
+function loadLocations() {
+    $.get('/system/api/locations')
+        .done(function(response) {
+            if (response.success) {
+                locations = response.data;
+                console.log('位置列表加载成功:', locations.length, '个位置');
+                
+                // 更新编辑模态框中的位置选项
+                updateEditModalLocationOptions();
+            } else {
+                console.error('加载位置列表失败:', response.message);
+            }
+        })
+        .fail(function() {
+            console.error('加载位置列表请求失败');
+        });
+}
+
+// 更新编辑模态框中的位置选项
+function updateEditModalLocationOptions() {
+    const selectElement = $('#editDefaultLocation');
+    
+    // 清空现有选项（保留第一个和第二个选项）
+    selectElement.find('option:gt(1)').remove();
+    
+    // 添加位置选项
+    if (locations && locations.length > 0) {
+        locations.forEach(function(location) {
+            selectElement.append(
+                `<option value="${location.id}">${location.name} - ${location.address}</option>`
+            );
+        });
+    }
+}
+
+// 获取用户默认位置信息
+function getUserDefaultLocation(locationId) {
+    if (!locationId) {
+        return { name: '未设置', isDefault: false };
+    }
+    
+    if (locationId === 'default') {
+        return { name: '默认位置', isDefault: true };
+    }
+    
+    // 查找对应的位置
+    const location = locations.find(loc => loc.id == locationId);
+    if (location) {
+        return { name: location.name, isDefault: false };
+    }
+    
+    return { name: '未知位置', isDefault: false };
+}
+
+console.log('=== 用户管理页面脚本加载完成 ===');
+console.log('当前时间:', new Date().toLocaleString());
+</script>
+{% endblock %} 

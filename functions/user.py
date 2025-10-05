@@ -53,10 +53,14 @@ def user_login(uname, password):
         )
         
         if init_result['statusCode'] != 200:
-            print("获取登录页面失败")
+            error_msg = "获取登录页面失败"
+            print(error_msg)
             if is_debug_mode():
                 debug_print(f"获取登录页面失败，状态码: {init_result['statusCode']}", "red")
-            return 'AuthFailed'
+            return {
+                'success': False,
+                'message': error_msg
+            }
             
         # 密码加密 - 模拟原始CryptoJS实现
         key = b'u2oh6Vu^HWe40fj'
@@ -144,10 +148,14 @@ def user_login(uname, password):
                     missing_cookies = [c for c in required_cookies if c not in session_cookies]
                     
                     if missing_cookies:
+                        error_msg = f"登录信息不完整，缺少以下cookie: {', '.join(missing_cookies)}"
                         if is_debug_mode():
-                            debug_print(f"登录信息不完整，缺少以下cookie: {', '.join(missing_cookies)}", "red")
+                            debug_print(error_msg, "red")
                             debug_print("请检查账号密码是否正确，或尝试使用其他登录方式", "red")
-                        return 'AuthFailed'
+                        return {
+                            'success': False,
+                            'message': error_msg
+                        }
                 
                 print("登录成功")
                 
@@ -159,14 +167,39 @@ def user_login(uname, password):
                 if is_debug_mode():
                     debug_print("登录成功，已保存认证信息", "green")
                 
-                # 返回所有需要的认证信息和cookie
-                return auth_cookies
+                # 获取用户真实姓名和详细信息
+                print("正在获取用户信息...")
+                if is_debug_mode():
+                    debug_print("开始获取用户详细信息", "blue")
+                
+                user_params = {**auth_cookies, 'phone': uname, 'password': password}
+                real_name = get_account_info(user_params)
+                
+                if is_debug_mode():
+                    debug_print(f"获取到用户真实姓名: {real_name}", "green")
+                
+                # 返回标准化的成功响应，包含详细的用户信息
+                return {
+                    'success': True,
+                    'message': '登录成功',
+                    'cookies': auth_cookies,
+                    'user_info': {
+                        'username': real_name if real_name != '未知用户' else session_cookies.get('uname', '未知用户'),
+                        'real_name': real_name,
+                        'uid': session_cookies.get('_uid'),
+                        'phone': uname,
+                    }
+                }
             else:
                 # 登录失败，可能是用户名密码错误
-                print(f"登录失败: {response_json.get('msg', '未知错误')}")
+                error_msg = response_json.get('msg', '未知错误')
+                print(f"登录失败: {error_msg}")
                 if is_debug_mode():
-                    debug_print(f"登录失败原因: {response_json.get('msg', '未知错误')}", "red")
-                return 'AuthFailed'
+                    debug_print(f"登录失败原因: {error_msg}", "red")
+                return {
+                    'success': False,
+                    'message': error_msg
+                }
                 
         except json.JSONDecodeError:
             print("登录响应格式异常，正在检查登录状态...")
@@ -181,10 +214,14 @@ def user_login(uname, password):
             missing_cookies = [c for c in required_cookies if c not in session_cookies]
             
             if missing_cookies:
-                print(f"登录信息不完整，缺少以下cookie: {', '.join(missing_cookies)}")
+                error_msg = f"登录信息不完整，缺少以下cookie: {', '.join(missing_cookies)}"
+                print(error_msg)
                 if is_debug_mode():
                     debug_print(f"登录失败，缺少必要Cookie: {missing_cookies}", "red")
-                return 'AuthFailed'
+                return {
+                    'success': False,
+                    'message': error_msg
+                }
             
             print("登录成功")
             
@@ -196,15 +233,38 @@ def user_login(uname, password):
             if is_debug_mode():
                 debug_print("登录成功，已保存认证信息", "green")
             
-            return auth_cookies
+            # 获取用户真实姓名和详细信息
+            print("正在获取用户信息...")
+            if is_debug_mode():
+                debug_print("开始获取用户详细信息", "blue")
+            
+            user_params = {**auth_cookies, 'phone': uname, 'password': password}
+            real_name = get_account_info(user_params)
+            
+            if is_debug_mode():
+                debug_print(f"获取到用户真实姓名: {real_name}", "green")
+            
+            return {
+                'success': True,
+                'message': '登录成功',
+                'cookies': auth_cookies,
+                'user_info': {
+                    'username': real_name if real_name != '未知用户' else session_cookies.get('uname', '未知用户'),
+                    'real_name': real_name,
+                    'uid': session_cookies.get('_uid'),
+                    'phone': uname,
+                }
+            }
             
     except Exception as e:
-        print(f"登录解析出错: {e}")
+        error_msg = f"登录解析出错: {e}"
+        print(error_msg)
         if is_debug_mode():
             debug_print(f"登录过程发生异常: {e}", "red")
-    
-    print("登录失败")
-    return 'AuthFailed'
+        return {
+            'success': False,
+            'message': error_msg
+        }
 
 def get_courses(_uid, _d, vc3):
     """

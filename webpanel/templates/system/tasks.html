@@ -1,0 +1,1095 @@
+{% extends "base.html" %}
+
+{% block title %}定时任务管理 - 超星学习通自动签到系统{% endblock %}
+
+{% block extra_css %}
+<style>
+.task-card {
+    transition: all 0.3s ease;
+}
+.task-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+.scheduler-status {
+    border-radius: 15px;
+    padding: 8px 16px;
+    font-weight: 500;
+}
+.task-status-badge {
+    font-size: 0.85em;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">
+        <i class="fas fa-clock me-2 text-primary"></i>
+        定时任务管理
+    </h1>
+    <div class="btn-group" role="group">
+        <button type="button" class="btn btn-outline-primary" onclick="refreshData()">
+            <i class="fas fa-sync-alt me-1"></i>刷新
+        </button>
+        <button type="button" class="btn btn-primary" onclick="showAddTaskModal()">
+            <i class="fas fa-plus me-1"></i>新建任务
+        </button>
+    </div>
+</div>
+
+<!-- 调度器状态卡片 -->
+<div class="row mb-4">
+    <div class="col-lg-4 col-md-6 mb-3">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center">
+                <div class="mb-2">
+                    <span class="scheduler-status bg-success text-white" id="scheduler-status">
+                        <i class="fas fa-play me-1"></i>运行中
+                    </span>
+                </div>
+                <h6 class="card-title">调度器状态</h6>
+                <p class="card-text text-muted small">运行状况良好</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4 col-md-6 mb-3">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center">
+                <h4 class="text-primary mb-0" id="active-tasks-count">0</h4>
+                <h6 class="card-title">活跃任务</h6>
+                <p class="card-text text-muted small">正在运行的任务数量</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4 col-md-6 mb-3">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center">
+                <h4 class="text-info mb-0" id="total-tasks-count">0</h4>
+                <h6 class="card-title">总任务数</h6>
+                <p class="card-text text-muted small">所有任务的数量</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 调度器控制按钮 -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <h6 class="card-title">
+                    <i class="fas fa-sliders-h me-2"></i>调度器控制
+                </h6>
+                <div class="btn-group" role="group">
+                    <button type="button" class="btn btn-success" onclick="startScheduler()">
+                        <i class="fas fa-play me-1"></i>启动调度器
+                    </button>
+                    <button type="button" class="btn btn-warning" onclick="stopScheduler()">
+                        <i class="fas fa-pause me-1"></i>停止调度器
+                    </button>
+                    <button type="button" class="btn btn-info" onclick="restartScheduler()">
+                        <i class="fas fa-redo me-1"></i>重启调度器
+                    </button>
+                </div>
+                <div class="ms-3 d-inline-block">
+                    <small class="text-muted">
+                        运行时间: <span id="scheduler-uptime">--</span>
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 任务列表 -->
+<div class="row">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-0">
+                <h5 class="mb-0">
+                    <i class="fas fa-list me-2"></i>任务列表
+                </h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th width="5%">ID</th>
+                                <th width="20%">任务名称</th>
+                                <th width="15%">类型</th>
+                                <th width="15%">调度时间</th>
+                                <th width="10%">状态</th>
+                                <th width="15%">下次执行</th>
+                                <th width="15%">最后执行</th>
+                                <th width="5%">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tasks-table-body">
+                            <tr>
+                                <td colspan="8" class="text-center py-4">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">加载中...</span>
+                                    </div>
+                                    <div class="mt-2">正在加载任务列表...</div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 添加/编辑任务模态框 -->
+<div class="modal fade" id="taskModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="taskModalTitle">
+                    <i class="fas fa-plus me-2"></i>新建任务
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="taskForm">
+                    <input type="hidden" id="task-id" name="id">
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="task-name" class="form-label">任务名称 <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="task-name" name="name" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="task-type" class="form-label">任务类型 <span class="text-danger">*</span></label>
+                                <select class="form-select" id="task-type" name="type" required onchange="onTaskTypeChange()">
+                                    <option value="">请选择任务类型</option>
+                                    <option value="sign">签到任务</option>
+                                    <option value="cookie_update">Cookie更新</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 执行模式选择 -->
+                    <div id="execution-mode" style="display: none;">
+                        <div class="mb-3">
+                            <label class="form-label">执行模式 <span class="text-danger">*</span></label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="execution_mode" id="mode-daily" value="daily" checked onchange="onExecutionModeChange()">
+                                <label class="form-check-label" for="mode-daily">
+                                    每日执行
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="execution_mode" id="mode-weekly" value="weekly" onchange="onExecutionModeChange()">
+                                <label class="form-check-label" for="mode-weekly">
+                                    每周执行
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="execution_mode" id="mode-interval" value="interval" onchange="onExecutionModeChange()">
+                                <label class="form-check-label" for="mode-interval">
+                                    间隔执行
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 每日/每周任务时间设置 -->
+                    <div id="time-settings" style="display: none;">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="task-time" class="form-label">执行时间</label>
+                                    <input type="time" class="form-control" id="task-time" name="time">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 每周任务日期设置 -->
+                    <div id="weekly-settings" style="display: none;">
+                        <div class="mb-3">
+                            <label class="form-label">执行日期</label>
+                            <div class="row">
+                                <div class="col-md-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="day-1" name="days" value="0">
+                                        <label class="form-check-label" for="day-1">周一</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="day-2" name="days" value="1">
+                                        <label class="form-check-label" for="day-2">周二</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="day-3" name="days" value="2">
+                                        <label class="form-check-label" for="day-3">周三</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="day-4" name="days" value="3">
+                                        <label class="form-check-label" for="day-4">周四</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="day-5" name="days" value="4">
+                                        <label class="form-check-label" for="day-5">周五</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="day-6" name="days" value="5">
+                                        <label class="form-check-label" for="day-6">周六</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="day-7" name="days" value="6">
+                                        <label class="form-check-label" for="day-7">周日</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 间隔执行设置 -->
+                    <div id="interval-settings" style="display: none;">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="interval-value" class="form-label">间隔时间</label>
+                                    <input type="number" class="form-control" id="interval-value" name="interval" min="1">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="interval-unit" class="form-label">时间单位</label>
+                                    <select class="form-select" id="interval-unit" name="unit">
+                                        <option value="minutes">分钟</option>
+                                        <option value="hours">小时</option>
+                                        <option value="days">天</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 签到任务用户选择 -->
+                    <div id="sign-user-settings" style="display: none;">
+                        <div class="mb-3">
+                            <label class="form-label">用户选择 <span class="text-danger">*</span></label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="user_selection" id="user-all" value="all" checked onchange="onUserSelectionChange()">
+                                <label class="form-check-label" for="user-all">
+                                    全部用户（包括后续添加的新用户）
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="user_selection" id="user-specific" value="specific" onchange="onUserSelectionChange()">
+                                <label class="form-check-label" for="user-specific">
+                                    选择指定用户
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <!-- 用户选择列表 -->
+                        <div id="user-list-container" style="display: none;">
+                            <div class="mb-3">
+                                <label class="form-label">选择用户</label>
+                                <div class="border rounded p-3" style="max-height: 200px; overflow-y: auto;">
+                                    <div id="user-list">
+                                        <div class="text-center text-muted">
+                                            <div class="spinner-border spinner-border-sm" role="status">
+                                                <span class="visually-hidden">加载中...</span>
+                                            </div>
+                                            <div class="mt-2">正在加载用户列表...</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <small class="text-muted">选择要执行签到任务的用户</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="task-description" class="form-label">任务描述</label>
+                        <textarea class="form-control" id="task-description" name="description" rows="3"></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="task-enabled" name="enabled" checked>
+                            <label class="form-check-label" for="task-enabled">
+                                启用任务
+                            </label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="saveTask()">
+                    <i class="fas fa-save me-1"></i>保存
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 页面加载时初始化
+$(document).ready(function() {
+    refreshData();
+    // 每30秒刷新一次数据
+    setInterval(refreshData, 30000);
+});
+
+// 刷新页面数据
+function refreshData() {
+    loadSchedulerStatus();
+    loadTasks();
+}
+
+// 加载调度器状态
+function loadSchedulerStatus() {
+    $.get('/system/api/scheduler_status')
+        .done(function(response) {
+            if (response.success) {
+                const status = response.data;
+                updateSchedulerStatus(status);
+            }
+        })
+        .fail(function() {
+            console.warn('获取调度器状态失败');
+        });
+}
+
+// 更新调度器状态显示
+function updateSchedulerStatus(status) {
+    const statusElement = $('#scheduler-status');
+    const uptimeElement = $('#scheduler-uptime');
+    
+    if (status.running) {
+        statusElement.removeClass('bg-danger').addClass('bg-success');
+        statusElement.html('<i class="fas fa-play me-1"></i>运行中');
+        uptimeElement.text(status.uptime || '--');
+    } else {
+        statusElement.removeClass('bg-success').addClass('bg-danger');
+        statusElement.html('<i class="fas fa-stop me-1"></i>已停止');
+        uptimeElement.text('--');
+    }
+}
+
+// 加载任务列表
+function loadTasks() {
+    $.get('/system/api/tasks')
+        .done(function(response) {
+            if (response.success) {
+                displayTasks(response.data);
+                updateTasksCount(response.data);
+            } else {
+                showError('获取任务列表失败: ' + response.message);
+            }
+        })
+        .fail(function() {
+            $('#tasks-table-body').html(`
+                <tr>
+                    <td colspan="8" class="text-center py-4 text-muted">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        加载任务列表失败
+                    </td>
+                </tr>
+            `);
+        });
+}
+
+// 显示任务列表
+function displayTasks(tasks) {
+    const tbody = $('#tasks-table-body');
+    
+    if (!tasks || tasks.length === 0) {
+        tbody.html(`
+            <tr>
+                <td colspan="8" class="text-center py-4 text-muted">
+                    <i class="fas fa-inbox me-2"></i>
+                    暂无任务
+                </td>
+            </tr>
+        `);
+        return;
+    }
+    
+    let html = '';
+    tasks.forEach((task, index) => {
+        const statusBadge = getStatusBadge(task.active);
+        const nextRun = calculateNextRun(task);
+        const lastRun = formatLastRun(task.last_run);
+        const schedule = formatSchedule(task);
+        const userInfo = getUserInfo(task);
+        
+        const isTaskActive = task.active !== false;
+        const executeButtonClass = isTaskActive ? 'btn-outline-success' : 'btn-outline-secondary';
+        const executeButtonDisabled = isTaskActive ? '' : 'disabled';
+        
+        html += `
+            <tr>
+                <td>${task.id || index + 1}</td>
+                <td>
+                    <div class="fw-bold">${task.name || '未命名任务'}</div>
+                    <small class="text-muted">${task.description || ''}</small>
+                    ${userInfo}
+                </td>
+                <td><span class="badge bg-info">${getTaskTypeText(task.type)}</span></td>
+                <td>${schedule}</td>
+                <td>${statusBadge}</td>
+                <td><small class="text-muted">${nextRun}</small></td>
+                <td><small class="text-muted">${lastRun}</small></td>
+                <td>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn ${executeButtonClass}" onclick="manualExecuteTask(${task.id || index})" title="${isTaskActive ? '手动执行' : '任务已禁用，无法执行'}" ${executeButtonDisabled}>
+                            <i class="fas fa-play"></i>
+                        </button>
+                        <button class="btn btn-outline-primary" onclick="editTask(${task.id || index})" title="编辑">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-outline-danger" onclick="deleteTask(${task.id || index})" title="删除">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    });
+    
+    tbody.html(html);
+}
+
+// 获取用户信息显示
+function getUserInfo(task) {
+    if (task.type !== 'sign') {
+        return '';
+    }
+    
+    const userType = task.user_type;
+    const userIds = task.user_ids || [];
+    
+    if (userType === 'all' || (userIds.length === 1 && userIds[0] === 'all')) {
+        return '<div class="mt-1"><small class="text-success"><i class="fas fa-users me-1"></i>全部用户</small></div>';
+    } else if (userIds && userIds.length > 0) {
+        const count = userIds.length;
+        return `<div class="mt-1"><small class="text-info"><i class="fas fa-user me-1"></i>${count}个用户</small></div>`;
+    } else {
+        return '<div class="mt-1"><small class="text-muted"><i class="fas fa-exclamation-triangle me-1"></i>未选择用户</small></div>';
+    }
+}
+
+// 更新任务统计
+function updateTasksCount(tasks) {
+    const totalCount = tasks ? tasks.length : 0;
+    const activeCount = tasks ? tasks.filter(task => task.active !== false).length : 0;
+    
+    $('#total-tasks-count').text(totalCount);
+    $('#active-tasks-count').text(activeCount);
+}
+
+// 获取状态徽章
+function getStatusBadge(active) {
+    if (active === true || active === undefined) {
+        return '<span class="badge bg-success">运行中</span>';
+    } else {
+        return '<span class="badge bg-secondary">已禁用</span>';
+    }
+}
+
+// 获取任务类型文本
+function getTaskTypeText(type) {
+    const types = {
+        'sign': '签到任务',
+        'cookie_update': 'Cookie更新'
+    };
+    return types[type] || type;
+}
+
+// 格式化最后执行时间
+function formatLastRun(lastRun) {
+    if (!lastRun) {
+        return '--';
+    }
+    
+    // 如果是字符串，直接返回
+    if (typeof lastRun === 'string') {
+        return lastRun;
+    }
+    
+    // 如果是对象，提取时间字段
+    if (typeof lastRun === 'object' && lastRun.time) {
+        return lastRun.time;
+    }
+    
+    // 其他情况返回默认值
+    return '--';
+}
+
+// 格式化调度时间
+function formatSchedule(task) {
+    // 如果有直接的schedule字段，使用它
+    if (task.schedule) {
+        return task.schedule;
+    }
+    
+    const mode = task.mode;
+    const interval = task.interval;
+    const unit = task.unit;
+    const time = task.time;
+    const days = task.days;
+    
+    switch(mode) {
+        case 'daily':
+            return `每日 ${time || '00:00'}`;
+        case 'weekly':
+            if (days && days.length > 0) {
+                const dayNames = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+                const selectedDays = days.map(d => dayNames[d]).join('、');
+                return `每周 ${selectedDays} ${time || '00:00'}`;
+            }
+            return `每周 ${time || '00:00'}`;
+        case 'interval':
+            if (interval && unit) {
+                const unitMap = {
+                    'minutes': '分钟',
+                    'hours': '小时',
+                    'days': '天'
+                };
+                return `每${interval}${unitMap[unit] || unit}`;
+            }
+            return '间隔执行';
+        default:
+            return '--';
+    }
+}
+
+// 计算下次执行时间
+function calculateNextRun(task) {
+    // 如果任务未激活，不显示下次执行时间
+    if (task.active === false) {
+        return '--';
+    }
+    
+    // 如果有预设的next_run字段，使用它
+    if (task.next_run && task.next_run !== '--') {
+        return task.next_run;
+    }
+    
+    const mode = task.mode;
+    const lastRunTime = task.last_run && task.last_run.time ? task.last_run.time : null;
+    const interval = parseInt(task.interval);
+    const unit = task.unit;
+    const time = task.time;
+    const days = task.days;
+    
+    try {
+        let nextRunDate;
+        
+        switch(mode) {
+            case 'daily':
+                // 每日执行：基于最后执行时间或当前时间计算
+                nextRunDate = new Date();
+                if (lastRunTime) {
+                    nextRunDate = new Date(lastRunTime);
+                }
+                // 设置为明天的指定时间
+                nextRunDate.setDate(nextRunDate.getDate() + 1);
+                if (time) {
+                    const [hours, minutes] = time.split(':').map(Number);
+                    nextRunDate.setHours(hours, minutes, 0, 0);
+                }
+                break;
+                
+            case 'weekly':
+                // 每周执行：找到下一个执行日期
+                nextRunDate = new Date();
+                if (lastRunTime) {
+                    nextRunDate = new Date(lastRunTime);
+                }
+                
+                if (days && days.length > 0) {
+                    // 找到下一个指定的星期几
+                    const currentDay = nextRunDate.getDay();
+                    let nextDay = days.find(day => day > currentDay);
+                    if (!nextDay) {
+                        // 如果没有找到，选择第一个指定的日期（下周）
+                        nextDay = days[0];
+                        nextRunDate.setDate(nextRunDate.getDate() + 7 - currentDay + nextDay);
+                    } else {
+                        nextRunDate.setDate(nextRunDate.getDate() + (nextDay - currentDay));
+                    }
+                    
+                    if (time) {
+                        const [hours, minutes] = time.split(':').map(Number);
+                        nextRunDate.setHours(hours, minutes, 0, 0);
+                    }
+                } else {
+                    // 没有指定日期，按每日处理
+                    nextRunDate.setDate(nextRunDate.getDate() + 1);
+                }
+                break;
+                
+            case 'interval':
+                // 间隔执行：基于最后执行时间计算
+                if (lastRunTime && interval && unit) {
+                    nextRunDate = new Date(lastRunTime);
+                    
+                    switch(unit) {
+                        case 'minutes':
+                            nextRunDate.setMinutes(nextRunDate.getMinutes() + interval);
+                            break;
+                        case 'hours':
+                            nextRunDate.setHours(nextRunDate.getHours() + interval);
+                            break;
+                        case 'days':
+                            nextRunDate.setDate(nextRunDate.getDate() + interval);
+                            break;
+                        default:
+                            // 默认按秒处理
+                            nextRunDate.setSeconds(nextRunDate.getSeconds() + interval);
+                    }
+                } else if (!lastRunTime && interval && unit) {
+                    // 如果没有最后执行时间，基于当前时间计算
+                    nextRunDate = new Date();
+                    
+                    switch(unit) {
+                        case 'minutes':
+                            nextRunDate.setMinutes(nextRunDate.getMinutes() + interval);
+                            break;
+                        case 'hours':
+                            nextRunDate.setHours(nextRunDate.getHours() + interval);
+                            break;
+                        case 'days':
+                            nextRunDate.setDate(nextRunDate.getDate() + interval);
+                            break;
+                        default:
+                            nextRunDate.setSeconds(nextRunDate.getSeconds() + interval);
+                    }
+                } else {
+                    // 如果没有间隔配置，返回--
+                    return '--';
+                }
+                break;
+                
+            default:
+                return '--';
+        }
+        
+        // 格式化日期时间
+        return formatDateTime(nextRunDate, 'YYYY-MM-DD HH:mm:ss');
+        
+    } catch (error) {
+        console.error('计算下次执行时间失败:', error);
+        return '--';
+    }
+}
+
+// 调度器控制函数
+function startScheduler() {
+    $.post('/system/api/scheduler/start')
+        .done(function(response) {
+            if (response.success) {
+                showSuccess('调度器启动成功');
+                refreshData();
+            } else {
+                showError('启动调度器失败: ' + response.message);
+            }
+        })
+        .fail(function() {
+            showError('启动调度器失败');
+        });
+}
+
+function stopScheduler() {
+    $.post('/system/api/scheduler/stop')
+        .done(function(response) {
+            if (response.success) {
+                showSuccess('调度器停止成功');
+                refreshData();
+            } else {
+                showError('停止调度器失败: ' + response.message);
+            }
+        })
+        .fail(function() {
+            showError('停止调度器失败');
+        });
+}
+
+function restartScheduler() {
+    $.post('/system/api/scheduler/restart')
+        .done(function(response) {
+            if (response.success) {
+                showSuccess('调度器重启成功');
+                refreshData();
+            } else {
+                showError('重启调度器失败: ' + response.message);
+            }
+        })
+        .fail(function() {
+            showError('重启调度器失败');
+        });
+}
+
+// 显示添加任务模态框
+function showAddTaskModal() {
+    $('#taskModalTitle').html('<i class="fas fa-plus me-2"></i>新建任务');
+    $('#taskForm')[0].reset();
+    $('#task-id').val('');
+    hideAllTaskSettings();
+    $('#taskModal').modal('show');
+}
+
+// 任务类型变化处理
+function onTaskTypeChange() {
+    const type = $('#task-type').val();
+    hideAllTaskSettings();
+    
+    if (type) {
+        // 显示执行模式选择
+        $('#execution-mode').show();
+        onExecutionModeChange(); // 根据默认选择显示相应设置
+        
+        // 如果是签到任务，显示用户选择设置
+        if (type === 'sign') {
+            $('#sign-user-settings').show();
+            loadUserList(); // 加载用户列表
+        }
+    }
+}
+
+// 执行模式变化处理
+function onExecutionModeChange() {
+    const mode = $('input[name="execution_mode"]:checked').val();
+    
+    // 隐藏所有设置
+    $('#time-settings, #weekly-settings, #interval-settings').hide();
+    
+    switch(mode) {
+        case 'daily':
+            $('#time-settings').show();
+            break;
+        case 'weekly':
+            $('#time-settings').show();
+            $('#weekly-settings').show();
+            break;
+        case 'interval':
+            $('#interval-settings').show();
+            break;
+    }
+}
+
+// 隐藏所有任务设置
+function hideAllTaskSettings() {
+    $('#execution-mode, #time-settings, #weekly-settings, #interval-settings, #sign-user-settings').hide();
+}
+
+// 用户选择变化处理
+function onUserSelectionChange() {
+    const selection = $('input[name="user_selection"]:checked').val();
+    
+    if (selection === 'specific') {
+        $('#user-list-container').show();
+    } else {
+        $('#user-list-container').hide();
+    }
+}
+
+// 加载用户列表
+function loadUserList() {
+    $.get('/user/api/list', { per_page: 100 })
+        .done(function(response) {
+            if (response.success && response.data) {
+                renderUserList(response.data.users || []);
+            } else {
+                $('#user-list').html('<div class="text-center text-muted">加载用户列表失败</div>');
+            }
+        })
+        .fail(function() {
+            $('#user-list').html('<div class="text-center text-muted">加载用户列表失败</div>');
+        });
+}
+
+// 渲染用户列表
+function renderUserList(users) {
+    const container = $('#user-list');
+    
+    if (!users || users.length === 0) {
+        container.html('<div class="text-center text-muted">暂无用户</div>');
+        return;
+    }
+    
+    let html = '';
+    users.forEach(user => {
+        const isActive = user.status === 'active';
+        const statusClass = isActive ? 'text-success' : 'text-muted';
+        const statusIcon = isActive ? 'fa-check-circle' : 'fa-times-circle';
+        
+        html += `
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="selected_users" value="${user.phone}" id="user-${user.phone}" ${!isActive ? 'disabled' : ''}>
+                <label class="form-check-label" for="user-${user.phone}">
+                    <span class="${statusClass}">
+                        <i class="fas ${statusIcon} me-1"></i>
+                        ${user.name || '未知用户'} (${user.phone})
+                    </span>
+                    ${!isActive ? '<small class="text-muted ms-2">[未激活]</small>' : ''}
+                </label>
+            </div>
+        `;
+    });
+    
+    container.html(html);
+}
+
+// 保存任务
+function saveTask() {
+    const formData = new FormData($('#taskForm')[0]);
+    const taskData = {};
+    
+    // 转换表单数据
+    for (let [key, value] of formData.entries()) {
+        if (key === 'days') {
+            if (!taskData.days) taskData.days = [];
+            taskData.days.push(parseInt(value));
+        } else if (key === 'enabled') {
+            taskData[key] = true;
+        } else if (key === 'execution_mode') {
+            // 处理执行模式选择
+            taskData.mode = value;
+        } else if (key === 'selected_users') {
+            // 处理选中的用户
+            if (!taskData.user_ids) taskData.user_ids = [];
+            taskData.user_ids.push(value);
+        } else {
+            taskData[key] = value;
+        }
+    }
+    
+    // 处理用户选择
+    const userSelection = $('input[name="user_selection"]:checked').val();
+    if (userSelection === 'all') {
+        taskData.user_type = 'all';
+        taskData.user_ids = ['all'];
+    } else if (userSelection === 'specific') {
+        taskData.user_type = 'phone';
+        // user_ids 已经在上面处理了
+    }
+    
+    // 如果没有选中enabled复选框，设为false
+    if (!taskData.enabled) {
+        taskData.enabled = false;
+    }
+    
+    const url = taskData.id ? `/system/api/tasks/${taskData.id}` : '/system/api/tasks';
+    const method = taskData.id ? 'PUT' : 'POST';
+    
+    $.ajax({
+        url: url,
+        method: method,
+        data: JSON.stringify(taskData),
+        contentType: 'application/json',
+        success: function(response) {
+            if (response.success) {
+                showSuccess(taskData.id ? '任务更新成功' : '任务创建成功');
+                $('#taskModal').modal('hide');
+                refreshData();
+            } else {
+                showError('保存任务失败: ' + response.message);
+            }
+        },
+        error: function() {
+            showError('保存任务失败');
+        }
+    });
+}
+
+// 编辑任务
+function editTask(taskId) {
+    $.get(`/system/api/tasks/${taskId}`)
+        .done(function(response) {
+            if (response.success) {
+                const task = response.data;
+                fillTaskForm(task);
+                $('#taskModalTitle').html('<i class="fas fa-edit me-2"></i>编辑任务');
+                $('#taskModal').modal('show');
+            } else {
+                showError('获取任务信息失败: ' + response.message);
+            }
+        })
+        .fail(function() {
+            showError('获取任务信息失败');
+        });
+}
+
+// 填充任务表单
+function fillTaskForm(task) {
+    $('#task-id').val(task.id);
+    $('#task-name').val(task.name);
+    $('#task-type').val(task.type);
+    $('#task-description').val(task.description);
+    $('#task-enabled').prop('checked', task.enabled);
+    
+    if (task.time) {
+        $('#task-time').val(task.time);
+    }
+    
+    if (task.days && task.days.length > 0) {
+        task.days.forEach(day => {
+            $(`#day-${day + 1}`).prop('checked', true);
+        });
+    }
+    
+    if (task.interval) {
+        $('#interval-value').val(task.interval);
+    }
+    
+    if (task.unit) {
+        $('#interval-unit').val(task.unit);
+    }
+    
+    // 处理执行模式选择
+    if (task.mode) {
+        $(`input[name="execution_mode"][value="${task.mode}"]`).prop('checked', true);
+    }
+    
+    // 处理用户选择
+    if (task.type === 'sign') {
+        if (task.user_type === 'all' || (task.user_ids && task.user_ids.includes('all'))) {
+            $('#user-all').prop('checked', true);
+        } else if (task.user_ids && task.user_ids.length > 0) {
+            $('#user-specific').prop('checked', true);
+            // 选中指定的用户
+            task.user_ids.forEach(userId => {
+                if (userId !== 'all') {
+                    $(`#user-${userId}`).prop('checked', true);
+                }
+            });
+        }
+        onUserSelectionChange();
+    }
+    
+    // 触发类型变化处理
+    onTaskTypeChange();
+}
+
+// 删除任务
+async function deleteTask(taskId) {
+    const confirmed = await confirmDialog('确定要删除这个任务吗？', '删除任务');
+    if (confirmed) {
+        $.ajax({
+            url: `/system/api/tasks/${taskId}`,
+            method: 'DELETE',
+            success: function(response) {
+                if (response.success) {
+                    showSuccess('任务删除成功');
+                    refreshData();
+                } else {
+                    showError('删除任务失败: ' + response.message);
+                }
+            },
+            error: function() {
+                showError('删除任务失败');
+            }
+        });
+    }
+}
+
+// 消息提示函数
+async function showSuccess(message) {
+    // 使用自定义的alertDialog替换原生alert
+    console.log('Success:', message);
+    await alertDialog('成功: ' + message, '操作成功', 'success');
+}
+
+async function showError(message) {
+    // 使用自定义的alertDialog替换原生alert
+    console.error('Error:', message);
+    await alertDialog('错误: ' + message, '操作失败', 'error');
+}
+
+// 手动执行任务
+async function manualExecuteTask(taskId) {
+    const taskName = getTaskName(taskId);
+    const confirmed = await confirmDialog(
+        `确定要手动执行任务 "${taskName}" 吗？\n\n这将立即执行该任务，无需等待定时调度。`, 
+        '手动执行任务'
+    );
+    
+    if (!confirmed) {
+        return;
+    }
+    
+    // 显示执行状态
+    const executeBtn = $(`button[onclick="manualExecuteTask(${taskId})"]`);
+    const originalHtml = executeBtn.html();
+    executeBtn.html('<i class="fas fa-spinner fa-spin"></i>').prop('disabled', true);
+    
+    try {
+        const response = await $.ajax({
+            url: `/system/api/tasks/${taskId}/execute`,
+            method: 'POST',
+            contentType: 'application/json'
+        });
+        
+        if (response.success) {
+            await showSuccess(`任务执行成功: ${response.message}`);
+            
+            // 显示详细结果
+            if (response.data && response.data.results) {
+                const results = response.data.results;
+                const successCount = response.data.success_count || 0;
+                const failedCount = response.data.failed_count || 0;
+                
+                let resultMessage = `执行完成:\n成功: ${successCount} 个\n失败: ${failedCount} 个`;
+                
+                if (failedCount > 0 && results.length > 0) {
+                    const failedResults = results.filter(r => !r.status);
+                    if (failedResults.length > 0) {
+                        resultMessage += `\n\n失败详情:\n${failedResults.map(r => `• ${r.user_id}: ${r.message}`).join('\n')}`;
+                    }
+                }
+                
+                await alertDialog(resultMessage, '执行结果详情', 'info');
+            }
+            
+            // 刷新任务列表以显示最新的执行时间
+            refreshData();
+        } else {
+            await showError(`任务执行失败: ${response.message}`);
+        }
+    } catch (error) {
+        console.error('手动执行任务失败:', error);
+        await showError('手动执行任务失败，请检查网络连接');
+    } finally {
+        // 恢复按钮状态
+        executeBtn.html(originalHtml).prop('disabled', false);
+    }
+}
+
+// 获取任务名称（从当前显示的任务列表中查找）
+function getTaskName(taskId) {
+    const taskRow = $(`button[onclick="manualExecuteTask(${taskId})"]`).closest('tr');
+    const taskNameElement = taskRow.find('td:nth-child(2) .fw-bold');
+    return taskNameElement.text() || `任务 ${taskId}`;
+}
+</script>
+{% endblock %} 

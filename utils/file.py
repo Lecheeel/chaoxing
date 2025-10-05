@@ -97,7 +97,13 @@ def store_user(phone, user):
             if 'username' not in user:
                 user['username'] = "未知用户"
             if 'active' not in user:
-                user['active'] = True
+                # 从全局设置中获取默认激活状态
+                try:
+                    from utils.global_settings import get_global_settings
+                    settings = get_global_settings()
+                    user['active'] = settings.get('user', {}).get('default_active_status', True)
+                except:
+                    user['active'] = True
             if 'id' not in user:
                 user['id'] = new_id
             
@@ -135,6 +141,7 @@ def store_user(phone, user):
             print(f"验证文件内容时出错: {ve}")
         
         print(f"用户信息保存成功，当前用户数量: {len(data.get('users', []))}")
+        
         return data['users']
     except Exception as e:
         print(f"存储用户信息失败: {e}")

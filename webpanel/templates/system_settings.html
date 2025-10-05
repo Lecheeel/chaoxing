@@ -1,0 +1,1050 @@
+{% extends "base.html" %}
+
+{% block title %}系统设置{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h2 class="page-title mb-4">
+                <i class="fas fa-cog me-2"></i>系统设置
+            </h2>
+        </div>
+    </div>
+
+    <!-- 设置导航标签 -->
+    <ul class="nav nav-tabs mb-4" id="settingsTabs">
+        <li class="nav-item">
+            <a class="nav-link active" id="scheduler-tab" data-bs-toggle="tab" href="#scheduler" role="tab">
+                <i class="fas fa-clock me-2"></i>定时任务
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="logs-tab" data-bs-toggle="tab" href="#logs" role="tab">
+                <i class="fas fa-file-alt me-2"></i>日志管理
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="monitor-tab" data-bs-toggle="tab" href="#monitor" role="tab">
+                <i class="fas fa-chart-area me-2"></i>系统监控
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="config-tab" data-bs-toggle="tab" href="#config" role="tab">
+                <i class="fas fa-sliders-h me-2"></i>系统配置
+            </a>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="settingsTabContent">
+        <!-- 定时任务标签页 -->
+        <div class="tab-pane fade show active" id="scheduler" role="tabpanel">
+            <div class="row">
+                <div class="col-lg-8">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">定时任务列表</h5>
+                            <button class="btn btn-primary btn-sm" onclick="addScheduleTask()">
+                                <i class="fas fa-plus me-2"></i>添加任务
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>任务名称</th>
+                                            <th>执行时间</th>
+                                            <th>状态</th>
+                                            <th>下次执行</th>
+                                            <th>操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="scheduleTasksTable">
+                                        <tr>
+                                            <td colspan="5" class="text-center">
+                                                <div class="spinner-border" role="status">
+                                                    <span class="visually-hidden">加载中...</span>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">调度器状态</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label class="form-label">调度器状态</label>
+                                <div>
+                                    <span class="badge bg-success fs-6" id="schedulerStatus">运行中</span>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">运行时间</label>
+                                <div id="schedulerUptime">-</div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">活跃任务数</label>
+                                <div id="activeTasksCount">-</div>
+                            </div>
+                            <div class="d-grid gap-2">
+                                <button class="btn btn-success" id="startSchedulerBtn" onclick="startScheduler()">
+                                    <i class="fas fa-play me-2"></i>启动调度器
+                                </button>
+                                <button class="btn btn-warning" id="stopSchedulerBtn" onclick="stopScheduler()">
+                                    <i class="fas fa-pause me-2"></i>停止调度器
+                                </button>
+                                <button class="btn btn-info" onclick="refreshSchedulerStatus()">
+                                    <i class="fas fa-sync-alt me-2"></i>刷新状态
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 日志管理标签页 -->
+        <div class="tab-pane fade" id="logs" role="tabpanel">
+            <div class="row">
+                <div class="col-lg-8">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">日志文件管理</h5>
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-secondary" onclick="refreshLogFiles()">
+                                    <i class="fas fa-sync-alt"></i>
+                                </button>
+                                <button class="btn btn-outline-warning" onclick="clearAllLogs()">
+                                    <i class="fas fa-broom"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>文件名</th>
+                                            <th>大小</th>
+                                            <th>修改时间</th>
+                                            <th>操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="logFilesTable">
+                                        <tr>
+                                            <td colspan="4" class="text-center">
+                                                <div class="spinner-border" role="status">
+                                                    <span class="visually-hidden">加载中...</span>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card mt-3">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">日志内容查看</h5>
+                            <div class="d-flex align-items-center">
+                                <label for="logLines" class="form-label me-2 mb-0">显示行数:</label>
+                                <select class="form-select form-select-sm" id="logLines" style="width: auto;" onchange="loadLogContent()">
+                                    <option value="50">50行</option>
+                                    <option value="100" selected>100行</option>
+                                    <option value="200">200行</option>
+                                    <option value="500">500行</option>
+                                    <option value="1000">1000行</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div id="logContent" class="log-content" style="height: 400px; overflow-y: auto; background: #1e1e1e; color: #fff; font-family: 'Courier New', monospace; padding: 15px; border-radius: 5px;">
+                                <div class="text-center text-muted py-4">
+                                    <i class="fas fa-file-alt fa-2x mb-2"></i>
+                                    <div>请选择一个日志文件查看内容</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">日志统计</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <small class="text-muted">日志文件总数</small>
+                                <div id="totalLogFiles">-</div>
+                            </div>
+                            <div class="mb-3">
+                                <small class="text-muted">总文件大小</small>
+                                <div id="totalLogSize">-</div>
+                            </div>
+                            <div class="mb-3">
+                                <small class="text-muted">最后更新时间</small>
+                                <div id="lastLogUpdate">-</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card mt-3">
+                        <div class="card-header">
+                            <h5 class="mb-0">日志操作</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="d-grid gap-2">
+                                <button class="btn btn-outline-primary" onclick="refreshLogFiles()">
+                                    <i class="fas fa-sync-alt me-2"></i>刷新日志列表
+                                </button>
+                                <button class="btn btn-outline-warning" onclick="clearAllLogs()">
+                                    <i class="fas fa-broom me-2"></i>清空所有日志
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 系统监控标签页 -->
+        <div class="tab-pane fade" id="monitor" role="tabpanel">
+            <div class="row">
+                <div class="col-lg-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">系统资源监控</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label class="form-label">CPU 使用率</label>
+                                <div class="progress mb-2">
+                                    <div class="progress-bar" id="cpuProgressBar" style="width: 0%"></div>
+                                </div>
+                                <small class="text-muted" id="cpuUsage">0%</small>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">内存使用率</label>
+                                <div class="progress mb-2">
+                                    <div class="progress-bar bg-warning" id="memoryProgressBar" style="width: 0%"></div>
+                                </div>
+                                <small class="text-muted" id="memoryUsage">0 MB / 0 MB</small>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">磁盘使用率</label>
+                                <div class="progress mb-2">
+                                    <div class="progress-bar bg-info" id="diskProgressBar" style="width: 0%"></div>
+                                </div>
+                                <small class="text-muted" id="diskUsage">0 GB / 0 GB</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">应用状态监控</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row text-center">
+                                <div class="col-6 mb-3">
+                                    <div class="card bg-light">
+                                        <div class="card-body">
+                                            <h6 class="card-title">运行时间</h6>
+                                            <h4 id="appUptime">-</h4>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-6 mb-3">
+                                    <div class="card bg-light">
+                                        <div class="card-body">
+                                            <h6 class="card-title">请求总数</h6>
+                                            <h4 id="totalRequests">-</h4>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="card bg-light">
+                                        <div class="card-body">
+                                            <h6 class="card-title">活跃连接</h6>
+                                            <h4 id="activeConnections">-</h4>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="card bg-light">
+                                        <div class="card-body">
+                                            <h6 class="card-title">平均响应时间</h6>
+                                            <h4 id="avgResponseTime">-</h4>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row mt-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">实时监控图表</h5>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="monitorChart" width="400" height="200"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 系统配置标签页 -->
+        <div class="tab-pane fade" id="config" role="tabpanel">
+            <div class="row">
+                <div class="col-lg-8">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">系统配置</h5>
+                        </div>
+                        <div class="card-body">
+                            <form id="systemConfigForm">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <h6 class="mb-3">签到设置</h6>
+                                        <div class="mb-3">
+                                            <label class="form-label">默认签到类型</label>
+                                            <select class="form-select" id="defaultSignType">
+                                                <option value="location">位置签到</option>
+                                                <option value="photo">拍照签到</option>
+                                                <option value="gesture">手势签到</option>
+                                                <option value="qrcode">二维码签到</option>
+                                            </select>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">签到超时时间（秒）</label>
+                                            <input type="number" class="form-control" id="signTimeout" value="30" min="10" max="300">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">重试次数</label>
+                                            <input type="number" class="form-control" id="retryCount" value="3" min="1" max="10">
+                                        </div>
+                                        <div class="mb-3">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="enableAutoSign">
+                                                <label class="form-check-label" for="enableAutoSign">
+                                                    启用自动签到
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <h6 class="mb-3">通知设置</h6>
+                                        <div class="mb-3">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="enableEmailNotification">
+                                                <label class="form-check-label" for="enableEmailNotification">
+                                                    启用邮件通知
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">SMTP服务器</label>
+                                            <input type="text" class="form-control" id="smtpServer" placeholder="smtp.example.com">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">SMTP端口</label>
+                                            <input type="number" class="form-control" id="smtpPort" value="587">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">发送邮箱</label>
+                                            <input type="email" class="form-control" id="emailSender">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">邮箱密码</label>
+                                            <input type="password" class="form-control" id="emailPassword">
+                                        </div>
+                                    </div>
+                                </div>
+                                <hr>
+                                <div class="row">
+                                    <div class="col-12">
+                                        <h6 class="mb-3">高级设置</h6>
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="mb-3">
+                                                    <label class="form-label">API请求间隔（毫秒）</label>
+                                                    <input type="number" class="form-control" id="apiInterval" value="1000" min="100">
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label">并发用户数限制</label>
+                                                    <input type="number" class="form-control" id="concurrentLimit" value="5" min="1" max="20">
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="mb-3">
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" id="enableDebugMode">
+                                                        <label class="form-check-label" for="enableDebugMode">
+                                                            启用调试模式
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" id="enableStatistics">
+                                                        <label class="form-check-label" for="enableStatistics">
+                                                            启用统计功能
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="d-flex justify-content-end">
+                                    <button type="button" class="btn btn-secondary me-2" onclick="resetConfig()">重置</button>
+                                    <button type="button" class="btn btn-primary" onclick="saveConfig()">保存配置</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">系统信息</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-2">
+                                <small class="text-muted">系统版本</small>
+                                <div id="systemVersion">v1.0.0</div>
+                            </div>
+                            <div class="mb-2">
+                                <small class="text-muted">Python版本</small>
+                                <div id="pythonVersion">-</div>
+                            </div>
+                            <div class="mb-2">
+                                <small class="text-muted">Flask版本</small>
+                                <div id="flaskVersion">-</div>
+                            </div>
+                            <div class="mb-2">
+                                <small class="text-muted">操作系统</small>
+                                <div id="osInfo">-</div>
+                            </div>
+                            <div class="mb-2">
+                                <small class="text-muted">启动时间</small>
+                                <div id="startTime">-</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card mt-3">
+                        <div class="card-header">
+                            <h5 class="mb-0">备份与恢复</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <button class="btn btn-outline-primary w-100" onclick="backupSystem()">
+                                    <i class="fas fa-download me-2"></i>导出系统备份
+                                </button>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">恢复备份</label>
+                                <input type="file" class="form-control" id="restoreFile" accept=".json,.zip">
+                            </div>
+                            <button class="btn btn-outline-warning w-100" onclick="restoreSystem()">
+                                <i class="fas fa-upload me-2"></i>恢复系统备份
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+let monitorChart;
+let currentLogFile = null;
+
+$(document).ready(function() {
+    // 初始化图表
+    initMonitorChart();
+    
+    // 加载各个标签页的数据
+    loadScheduleTasks();
+    loadLogFiles();
+    loadSystemMonitor();
+    loadSystemConfig();
+    
+    // 定时刷新监控数据
+    setInterval(function() {
+        if ($('#monitor-tab').hasClass('active')) {
+            loadSystemMonitor();
+        }
+    }, 5000);
+    
+    // 标签切换事件
+    $('a[data-bs-toggle="tab"]').on('shown.bs.tab', function (e) {
+        const target = $(e.target).attr('href');
+        if (target === '#logs') {
+            loadLogFiles();
+        } else if (target === '#monitor') {
+            loadSystemMonitor();
+        }
+    });
+});
+
+// 初始化监控图表
+function initMonitorChart() {
+    const ctx = document.getElementById('monitorChart').getContext('2d');
+    monitorChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'CPU使用率',
+                data: [],
+                borderColor: 'rgb(75, 192, 192)',
+                tension: 0.1
+            }, {
+                label: '内存使用率',
+                data: [],
+                borderColor: 'rgb(255, 99, 132)',
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100
+                }
+            }
+        }
+    });
+}
+
+// 加载定时任务
+function loadScheduleTasks() {
+    $.get('/api/system/schedule_tasks', function(response) {
+        if (response.success) {
+            renderScheduleTasks(response.data.tasks);
+            updateSchedulerStatus(response.data.scheduler);
+        }
+    }).fail(function() {
+        showToast('加载定时任务失败', 'error');
+    });
+}
+
+// 渲染定时任务表格
+function renderScheduleTasks(tasks) {
+    const tbody = $('#scheduleTasksTable');
+    tbody.empty();
+    
+    if (tasks.length === 0) {
+        tbody.append('<tr><td colspan="5" class="text-center text-muted">暂无定时任务</td></tr>');
+        return;
+    }
+    
+    tasks.forEach(task => {
+        const row = `
+            <tr>
+                <td>${task.name}</td>
+                <td>${task.schedule}</td>
+                <td>
+                    <span class="badge bg-${task.status === 'active' ? 'success' : 'secondary'}">
+                        ${task.status === 'active' ? '运行中' : '已停止'}
+                    </span>
+                </td>
+                <td>${task.next_run || '-'}</td>
+                <td>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-primary" onclick="editTask('${task.id}')">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-outline-${task.status === 'active' ? 'warning' : 'success'}" 
+                                onclick="toggleTask('${task.id}')">
+                            <i class="fas fa-${task.status === 'active' ? 'pause' : 'play'}"></i>
+                        </button>
+                        <button class="btn btn-outline-danger" onclick="deleteTask('${task.id}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+        tbody.append(row);
+    });
+}
+
+// 更新调度器状态
+function updateSchedulerStatus(scheduler) {
+    $('#schedulerStatus').text(scheduler.status === 'running' ? '运行中' : '已停止')
+                         .removeClass('bg-success bg-danger')
+                         .addClass(scheduler.status === 'running' ? 'bg-success' : 'bg-danger');
+    $('#schedulerUptime').text(scheduler.uptime || '-');
+    $('#activeTasksCount').text(scheduler.active_tasks || 0);
+    
+    // 更新按钮状态
+    if (scheduler.status === 'running') {
+        $('#startSchedulerBtn').hide();
+        $('#stopSchedulerBtn').show();
+    } else {
+        $('#startSchedulerBtn').show();
+        $('#stopSchedulerBtn').hide();
+    }
+}
+
+// 加载日志文件列表
+function loadLogFiles() {
+    $.get('/system/api/logs/list')
+        .done(function(response) {
+            if (response.success) {
+                renderLogFiles(response.data);
+                updateLogStats(response.data);
+            } else {
+                showToast('获取日志文件列表失败: ' + response.message, 'error');
+            }
+        })
+        .fail(function() {
+            $('#logFilesTable').html(`
+                <tr>
+                    <td colspan="4" class="text-center text-muted">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        加载日志文件列表失败
+                    </td>
+                </tr>
+            `);
+        });
+}
+
+// 渲染日志文件列表
+function renderLogFiles(logFiles) {
+    const tbody = $('#logFilesTable');
+    
+    if (!logFiles || logFiles.length === 0) {
+        tbody.html(`
+            <tr>
+                <td colspan="4" class="text-center text-muted">
+                    <i class="fas fa-inbox me-2"></i>
+                    暂无日志文件
+                </td>
+            </tr>
+        `);
+        return;
+    }
+    
+    let html = '';
+    logFiles.forEach(logFile => {
+        const sizeText = formatFileSize(logFile.size);
+        
+        html += `
+            <tr>
+                <td>
+                    <div class="fw-bold">${logFile.name}</div>
+                </td>
+                <td>
+                    <span class="text-muted">${sizeText}</span>
+                </td>
+                <td>
+                    <small class="text-muted">${logFile.modified}</small>
+                </td>
+                <td>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-primary" onclick="viewLog('${logFile.name}')" title="查看">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        <button class="btn btn-outline-danger" onclick="deleteLog('${logFile.name}')" title="删除">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    });
+    
+    tbody.html(html);
+}
+
+// 格式化文件大小
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+// 查看日志内容
+function viewLog(logName) {
+    currentLogFile = logName;
+    loadLogContent();
+}
+
+// 加载日志内容
+function loadLogContent() {
+    if (!currentLogFile) {
+        $('#logContent').html(`
+            <div class="text-center text-muted py-4">
+                <i class="fas fa-file-alt fa-2x mb-2"></i>
+                <div>请选择一个日志文件查看内容</div>
+            </div>
+        `);
+        return;
+    }
+    
+    const lines = $('#logLines').val();
+    
+    $('#logContent').html(`
+        <div class="text-center py-4">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">加载中...</span>
+            </div>
+            <div class="mt-2">正在加载日志内容...</div>
+        </div>
+    `);
+    
+    $.get(`/system/api/logs/${currentLogFile}`, { lines: lines })
+        .done(function(response) {
+            if (response.success) {
+                const content = response.data.join('\n');
+                $('#logContent').text(content);
+            } else {
+                $('#logContent').html(`
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        加载日志内容失败: ${response.message}
+                    </div>
+                `);
+            }
+        })
+        .fail(function() {
+            $('#logContent').html(`
+                <div class="text-center text-muted py-4">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    加载日志内容失败
+                </div>
+            `);
+        });
+}
+
+// 删除日志文件
+async function deleteLog(logName) {
+    const confirmed = await confirmDialog(`确定要删除日志文件 ${logName} 吗？此操作不可撤销。`, '删除日志文件');
+    if (confirmed) {
+        $.ajax({
+            url: `/system/api/logs/${logName}`,
+            method: 'DELETE',
+            success: function(response) {
+                if (response.success) {
+                    showToast(response.message, 'success');
+                    loadLogFiles();
+                    
+                    // 如果删除的是当前查看的日志，清空内容区域
+                    if (currentLogFile === logName) {
+                        currentLogFile = null;
+                        $('#logContent').html(`
+                            <div class="text-center text-muted py-4">
+                                <i class="fas fa-file-alt fa-2x mb-2"></i>
+                                <div>请选择一个日志文件查看内容</div>
+                            </div>
+                        `);
+                    }
+                } else {
+                    showToast('删除日志文件失败: ' + response.message, 'error');
+                }
+            },
+            error: function() {
+                showToast('删除日志文件失败', 'error');
+            }
+        });
+    }
+}
+
+// 清空所有日志
+async function clearAllLogs() {
+    const confirmed = await confirmDialog('确定要清空所有日志文件吗？此操作不可撤销。', '清空所有日志');
+    if (confirmed) {
+        $.post('/system/api/logs/clear')
+            .done(function(response) {
+                if (response.success) {
+                    showToast(response.message, 'success');
+                    loadLogFiles();
+                    
+                    // 清空当前查看的日志内容
+                    currentLogFile = null;
+                    $('#logContent').html(`
+                        <div class="text-center text-muted py-4">
+                            <i class="fas fa-file-alt fa-2x mb-2"></i>
+                            <div>请选择一个日志文件查看内容</div>
+                        </div>
+                    `);
+                } else {
+                    showToast('清空日志文件失败: ' + response.message, 'error');
+                }
+            })
+            .fail(function() {
+                showToast('清空日志文件失败', 'error');
+            });
+    }
+}
+
+// 刷新日志文件列表
+function refreshLogFiles() {
+    loadLogFiles();
+    showToast('日志文件列表已刷新', 'success');
+}
+
+// 更新日志统计
+function updateLogStats(logFiles) {
+    const totalFiles = logFiles ? logFiles.length : 0;
+    const totalSize = logFiles ? logFiles.reduce((sum, file) => sum + file.size, 0) : 0;
+    const lastUpdate = logFiles && logFiles.length > 0 ? 
+        logFiles.sort((a, b) => new Date(b.modified) - new Date(a.modified))[0].modified : '-';
+    
+    $('#totalLogFiles').text(totalFiles);
+    $('#totalLogSize').text(formatFileSize(totalSize));
+    $('#lastLogUpdate').text(lastUpdate);
+}
+
+// 加载系统监控
+function loadSystemMonitor() {
+    $.get('/api/system/monitor', function(response) {
+        if (response.success) {
+            updateSystemResources(response.data.resources);
+            updateAppStatus(response.data.app);
+            updateMonitorChart(response.data.history);
+        }
+    }).fail(function() {
+        showToast('加载系统监控失败', 'error');
+    });
+}
+
+// 更新系统资源
+function updateSystemResources(resources) {
+    // CPU
+    $('#cpuProgressBar').css('width', resources.cpu_percent + '%');
+    $('#cpuUsage').text(resources.cpu_percent + '%');
+    
+    // 内存
+    const memoryPercent = (resources.memory_used / resources.memory_total * 100).toFixed(1);
+    $('#memoryProgressBar').css('width', memoryPercent + '%');
+    $('#memoryUsage').text(`${(resources.memory_used / 1024 / 1024).toFixed(0)} MB / ${(resources.memory_total / 1024 / 1024).toFixed(0)} MB`);
+    
+    // 磁盘
+    const diskPercent = (resources.disk_used / resources.disk_total * 100).toFixed(1);
+    $('#diskProgressBar').css('width', diskPercent + '%');
+    $('#diskUsage').text(`${(resources.disk_used / 1024 / 1024 / 1024).toFixed(1)} GB / ${(resources.disk_total / 1024 / 1024 / 1024).toFixed(1)} GB`);
+}
+
+// 更新应用状态
+function updateAppStatus(app) {
+    $('#appUptime').text(app.uptime || '-');
+    $('#totalRequests').text(app.total_requests || '-');
+    $('#activeConnections').text(app.active_connections || '-');
+    $('#avgResponseTime').text((app.avg_response_time || 0) + 'ms');
+}
+
+// 更新监控图表
+function updateMonitorChart(history) {
+    if (!history || history.length === 0) return;
+    
+    const labels = history.map(h => h.timestamp);
+    const cpuData = history.map(h => h.cpu_percent);
+    const memoryData = history.map(h => h.memory_percent);
+    
+    monitorChart.data.labels = labels;
+    monitorChart.data.datasets[0].data = cpuData;
+    monitorChart.data.datasets[1].data = memoryData;
+    monitorChart.update();
+}
+
+// 加载系统配置
+function loadSystemConfig() {
+    $.get('/api/system/config', function(response) {
+        if (response.success) {
+            populateConfigForm(response.data);
+        }
+    }).fail(function() {
+        showToast('加载系统配置失败', 'error');
+    });
+    
+    // 加载系统信息
+    $.get('/api/system/info', function(response) {
+        if (response.success) {
+            updateSystemInfo(response.data);
+        }
+    });
+}
+
+// 填充配置表单
+function populateConfigForm(config) {
+    $('#defaultSignType').val(config.default_sign_type || 'location');
+    $('#signTimeout').val(config.sign_timeout || 30);
+    $('#retryCount').val(config.retry_count || 3);
+    $('#enableAutoSign').prop('checked', config.enable_auto_sign || false);
+    
+    $('#enableEmailNotification').prop('checked', config.enable_email_notification || false);
+    $('#smtpServer').val(config.smtp_server || '');
+    $('#smtpPort').val(config.smtp_port || 587);
+    $('#emailSender').val(config.email_sender || '');
+    $('#emailPassword').val(config.email_password || '');
+    
+    $('#apiInterval').val(config.api_interval || 1000);
+    $('#concurrentLimit').val(config.concurrent_limit || 5);
+    $('#enableDebugMode').prop('checked', config.enable_debug_mode || false);
+    $('#enableStatistics').prop('checked', config.enable_statistics || true);
+}
+
+// 更新系统信息
+function updateSystemInfo(info) {
+    $('#systemVersion').text(info.version || 'v1.0.0');
+    $('#pythonVersion').text(info.python_version || '-');
+    $('#flaskVersion').text(info.flask_version || '-');
+    $('#osInfo').text(info.os_info || '-');
+    $('#startTime').text(info.start_time || '-');
+}
+
+// 保存系统配置
+function saveConfig() {
+    const config = {
+        default_sign_type: $('#defaultSignType').val(),
+        sign_timeout: parseInt($('#signTimeout').val()),
+        retry_count: parseInt($('#retryCount').val()),
+        enable_auto_sign: $('#enableAutoSign').prop('checked'),
+        
+        enable_email_notification: $('#enableEmailNotification').prop('checked'),
+        smtp_server: $('#smtpServer').val(),
+        smtp_port: parseInt($('#smtpPort').val()),
+        email_sender: $('#emailSender').val(),
+        email_password: $('#emailPassword').val(),
+        
+        api_interval: parseInt($('#apiInterval').val()),
+        concurrent_limit: parseInt($('#concurrentLimit').val()),
+        enable_debug_mode: $('#enableDebugMode').prop('checked'),
+        enable_statistics: $('#enableStatistics').prop('checked')
+    };
+    
+    $.ajax({
+        url: '/api/system/config',
+        method: 'POST',
+        data: JSON.stringify(config),
+        contentType: 'application/json',
+        success: function(response) {
+            if (response.success) {
+                showToast('系统配置保存成功', 'success');
+            } else {
+                showToast('保存配置失败: ' + response.message, 'error');
+            }
+        },
+        error: function() {
+            showToast('保存配置失败', 'error');
+        }
+    });
+}
+
+// 重置配置
+async function resetConfig() {
+    const confirmed = await confirmDialog('确定要重置所有配置为默认值吗？', '重置配置');
+    if (confirmed) {
+        loadSystemConfig();
+        showToast('配置已重置', 'info');
+    }
+}
+
+// 启动调度器
+function startScheduler() {
+    $.post('/api/system/scheduler/start', function(response) {
+        if (response.success) {
+            showToast('调度器启动成功', 'success');
+            loadScheduleTasks();
+        } else {
+            showToast('启动调度器失败: ' + response.message, 'error');
+        }
+    }).fail(function() {
+        showToast('启动调度器失败', 'error');
+    });
+}
+
+// 停止调度器
+function stopScheduler() {
+    $.post('/api/system/scheduler/stop', function(response) {
+        if (response.success) {
+            showToast('调度器已停止', 'info');
+            loadScheduleTasks();
+        } else {
+            showToast('停止调度器失败: ' + response.message, 'error');
+        }
+    }).fail(function() {
+        showToast('停止调度器失败', 'error');
+    });
+}
+
+// 刷新调度器状态
+function refreshSchedulerStatus() {
+    loadScheduleTasks();
+    showToast('调度器状态已刷新', 'success');
+}
+
+// 刷新日志文件列表
+function refreshLogFiles() {
+    loadLogFiles();
+    showToast('日志文件列表已刷新', 'success');
+}
+
+// 系统备份
+function backupSystem() {
+    window.location.href = '/api/system/backup/export';
+    showToast('正在生成系统备份...', 'info');
+}
+
+// 系统恢复
+async function restoreSystem() {
+    const fileInput = $('#restoreFile')[0];
+    if (!fileInput.files.length) {
+        showToast('请选择备份文件', 'warning');
+        return;
+    }
+    
+    const confirmed = await confirmDialog('确定要恢复系统备份吗？这将覆盖当前配置。', '恢复系统备份');
+    if (confirmed) {
+        const formData = new FormData();
+        formData.append('backup_file', fileInput.files[0]);
+        
+        $.ajax({
+            url: '/api/system/backup/restore',
+            method: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function(response) {
+                if (response.success) {
+                    showToast('系统恢复成功', 'success');
+                    setTimeout(() => window.location.reload(), 2000);
+                } else {
+                    showToast('系统恢复失败: ' + response.message, 'error');
+                }
+            },
+            error: function() {
+                showToast('系统恢复失败', 'error');
+            }
+        });
+    }
+}
+</script>
+{% endblock %} 

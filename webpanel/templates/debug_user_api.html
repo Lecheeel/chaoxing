@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>用户API调试</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .result { background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .error { background: #ffebee; color: #c62828; }
+        .success { background: #e8f5e9; color: #2e7d32; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>用户管理API调试工具</h1>
+    
+    <div>
+        <button onclick="testStatsAPI()">测试统计API</button>
+        <button onclick="testListAPI()">测试用户列表API</button>
+        <button onclick="testUsersAPI()">测试用户API</button>
+        <button onclick="clearResults()">清空结果</button>
+    </div>
+    
+    <div id="results"></div>
+
+    <script>
+        function addResult(title, content, isError = false) {
+            const resultDiv = $('<div>').addClass('result').addClass(isError ? 'error' : 'success');
+            resultDiv.html(`<h3>${title}</h3><pre>${JSON.stringify(content, null, 2)}</pre>`);
+            $('#results').append(resultDiv);
+        }
+
+        function testStatsAPI() {
+            console.log('测试统计API...');
+            $.get('/user/api/stats')
+                .done(function(response) {
+                    addResult('统计API - 成功', response);
+                })
+                .fail(function(xhr, status, error) {
+                    addResult('统计API - 失败', {
+                        status: xhr.status,
+                        statusText: xhr.statusText,
+                        responseText: xhr.responseText,
+                        error: error
+                    }, true);
+                });
+        }
+
+        function testListAPI() {
+            console.log('测试用户列表API...');
+            $.get('/user/api/list', {page: 1, per_page: 10})
+                .done(function(response) {
+                    addResult('用户列表API - 成功', response);
+                })
+                .fail(function(xhr, status, error) {
+                    addResult('用户列表API - 失败', {
+                        status: xhr.status,
+                        statusText: xhr.statusText,
+                        responseText: xhr.responseText,
+                        error: error
+                    }, true);
+                });
+        }
+
+        function testUsersAPI() {
+            console.log('测试用户API...');
+            $.get('/user/api/users')
+                .done(function(response) {
+                    addResult('用户API - 成功', response);
+                })
+                .fail(function(xhr, status, error) {
+                    addResult('用户API - 失败', {
+                        status: xhr.status,
+                        statusText: xhr.statusText,
+                        responseText: xhr.responseText,
+                        error: error
+                    }, true);
+                });
+        }
+
+        function clearResults() {
+            $('#results').empty();
+        }
+    </script>
+</body>
+</html> 

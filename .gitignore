@@ -1,9 +1,18 @@
-#Python缓存文件
+# ===========================================
+# 超星学习通自动签到系统 - .gitignore
+# ===========================================
+
+# Python 相关
+# ===========================================
+# 字节码文件
 __pycache__/
 *.py[cod]
 *$py.class
-.pytest_cache/
-*.so
+*.pyc
+*.pyo
+*.pyd
+
+# 分发/打包
 .Python
 build/
 develop-eggs/
@@ -17,41 +26,238 @@ parts/
 sdist/
 var/
 wheels/
+share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
-#虚拟环境
+# PyInstaller
+*.manifest
+*.spec
+
+# 单元测试/覆盖率报告
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# 虚拟环境
+# ===========================================
 venv/
 env/
 ENV/
-.env
+env.bak/
+venv.bak/
+.venv/
+.env/
 .venv
-
-#IDE相关文件
-.idea/
-.vscode/
-*.swp
-*.swo
-.DS_Store
-
-#日志文件
-*.log
-logs/
-
-#数据文件
-configs/storage.json
-configs/schedule.json
-configs/*.json
-test_sign/
-
-#临时文件
-temp/
-tmp/
-.coverage
-htmlcov/
-
+.env
 .env.local
 .env.development.local
 .env.test.local
-.env.production.local 
+.env.production.local
+
+# IDE 和编辑器
+# ===========================================
+# VSCode
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# 系统文件
+# ===========================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.tmp
+*.temp
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# 项目特定文件
+# ===========================================
+# 日志文件
+*.log
+logs/
+log/
+
+# 配置文件（包含敏感信息）
+configs/storage.json
+configs/schedule.json
+configs/daily_stats.json
+configs/*.json
+!configs/0.jpg  # 保留示例图片
+
+# 用户数据
+users/
+user_data/
+*.db
+*.sqlite
+*.sqlite3
+
+# 临时文件
+temp/
+tmp/
+.tmp/
+.temp/
+
+# 测试相关
+test_sign/
+test_data/
+test_output/
+
+# 缓存文件
+.cache/
+cache/
+*.cache
+
+# 备份文件
+*.bak
+*.backup
+*.old
+*.orig
+
+# 压缩文件
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# 图片和媒体文件（除了示例文件）
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tiff
+*.webp
+*.mp4
+*.avi
+*.mov
+*.wmv
+*.flv
+*.webm
+!configs/0.jpg  # 保留示例图片
+
+# 文档和说明
+*.doc
+*.docx
+*.pdf
+*.txt
+!README.md
+!LICENSE
+
+# 密钥和证书
+*.key
+*.pem
+*.crt
+*.cer
+*.p12
+*.pfx
+*.jks
+
+# 数据库
+*.db
+*.sqlite
+*.sqlite3
+*.mdb
+*.accdb
+
+# 其他
+# ===========================================
+# 依赖管理
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# 环境变量
+.env
+.env.*
+!.env.example
+
+# 部署相关
+docker-compose.override.yml
+.dockerignore
+
+# 监控和性能
+*.prof
+*.profile
+
+# 安全相关
+.secrets/
+secrets/
+*.secret 

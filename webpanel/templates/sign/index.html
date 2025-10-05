@@ -1,0 +1,373 @@
+{% extends "base.html" %}
+
+{% block title %}签到概览 - 超星学习通自动签到系统{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="h3 mb-0">
+                <i class="fas fa-check-circle me-2 text-primary"></i>
+                签到概览
+            </h1>
+            <div class="btn-group" role="group">
+                <a href="{{ url_for('sign.manual') }}" class="btn btn-primary">
+                    <i class="fas fa-hand-pointer me-1"></i>手动签到
+                </a>
+                <a href="{{ url_for('sign.activities') }}" class="btn btn-outline-info">
+                    <i class="fas fa-list me-1"></i>活动列表
+                </a>
+                <a href="{{ url_for('sign.history') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-history me-1"></i>签到历史
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 签到统计 -->
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h5 class="card-title">成功签到</h5>
+                        <h2 class="mb-0" id="success-count">-</h2>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-check-circle fa-3x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card bg-warning text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h5 class="card-title">失败签到</h5>
+                        <h2 class="mb-0" id="failed-count">-</h2>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-times-circle fa-3x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card bg-info text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h5 class="card-title">用户总数</h5>
+                        <h2 class="mb-0" id="user-count">{{ users|length }}</h2>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-users fa-3x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h5 class="card-title">位置数量</h5>
+                        <h2 class="mb-0" id="location-count">{{ locations|length }}</h2>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-map-marker-alt fa-3x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 快速签到操作 -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-bolt me-2"></i>批量签到
+                </h5>
+            </div>
+            <div class="card-body">
+                <form id="batchSignForm">
+                    <div class="mb-3">
+                        <label for="locationSelect" class="form-label">选择签到位置</label>
+                        <select class="form-select" id="locationSelect">
+                            <option value="">使用默认位置</option>
+                            {% for location in locations %}
+                            <option value="{{ location.id }}" {% if loop.first %}selected{% endif %}>{{ location.name }} - {{ location.address }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-success btn-lg">
+                            <i class="fas fa-users me-2"></i>为所有用户签到
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card shadow">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-user me-2"></i>单个用户签到
+                </h5>
+            </div>
+            <div class="card-body">
+                <form id="singleSignForm">
+                    <div class="mb-3">
+                        <label for="userSelect" class="form-label">选择用户</label>
+                        <select class="form-select" id="userSelect" required>
+                            <option value="">请选择用户</option>
+                            {% for user in users %}
+                            <option value="{{ loop.index0 }}">{{ user.username or user.name or '未知用户' }} ({{ user.phone }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="singleLocationSelect" class="form-label">选择签到位置</label>
+                        <select class="form-select" id="singleLocationSelect">
+                            <option value="">使用默认位置</option>
+                            {% for location in locations %}
+                            <option value="{{ location.id }}" {% if loop.first %}selected{% endif %}>{{ location.name }} - {{ location.address }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-info btn-lg">
+                            <i class="fas fa-user-check me-2"></i>为该用户签到
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 用户列表 -->
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-users me-2"></i>用户列表
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>用户名</th>
+                                <th>姓名</th>
+                                <th>状态</th>
+                                <th>最后签到时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if users %}
+                                {% for user in users %}
+                                <tr>
+                                    <td>{{ user.username }}</td>
+                                    <td>{{ user.name or user.username }}</td>
+                                    <td>
+                                        <span class="badge bg-success">正常</span>
+                                    </td>
+                                    <td class="text-muted">{{ user.last_sign_time or '暂无记录' }}</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-primary" data-user-id="{{ loop.index0 }}" onclick="signSingleUser(this.dataset.userId)">
+                                            <i class="fas fa-play me-1"></i>签到
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-info" data-user-id="{{ loop.index0 }}" onclick="viewUserActivities(this.dataset.userId)">
+                                            <i class="fas fa-list me-1"></i>活动
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted">
+                                        暂无用户，请先
+                                        <a href="{{ url_for('user.add') }}" class="text-decoration-none">添加用户</a>
+                                    </td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    loadSignStats();
+    
+    // 批量签到表单
+    $('#batchSignForm').on('submit', function(e) {
+        e.preventDefault();
+        const locationId = $('#locationSelect').val();
+        batchSign(locationId);
+    });
+    
+    // 单个用户签到表单
+    $('#singleSignForm').on('submit', function(e) {
+        e.preventDefault();
+        const userId = $('#userSelect').val();
+        const locationId = $('#singleLocationSelect').val();
+        
+        if (!userId || userId === '') {
+            showToast('请选择用户', 'warning');
+            return;
+        }
+        
+        // 将字符串转换为数字索引
+        const userIndex = parseInt(userId);
+        signUser(userIndex, locationId);
+    });
+});
+
+function loadSignStats() {
+    $.get('/sign/api/sign_status')
+        .done(function(response) {
+            if (response.success) {
+                $('#success-count').text(response.data.today_success);
+                $('#failed-count').text(response.data.today_failed);
+            }
+        })
+        .fail(function() {
+            $('#success-count').text('--');
+            $('#failed-count').text('--');
+        });
+}
+
+async function batchSign(locationId) {
+    const confirmed = await confirmDialog('确定要为所有用户执行签到吗？', '批量签到');
+    if (!confirmed) {
+        return;
+    }
+    
+    showLoadingToast('正在执行批量签到...');
+    
+    $.ajax({
+        url: '/sign/api/sign_all',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            location_id: locationId || null
+        }),
+        success: function(response) {
+            hideLoadingToast();
+            if (response.success) {
+                // 统计成功和失败的数量
+                let successCount = 0;
+                let failedCount = 0;
+                let resultMessages = [];
+                
+                if (response.data && Array.isArray(response.data)) {
+                    response.data.forEach(function(item) {
+                        if (item.success) {
+                            successCount++;
+                        } else {
+                            failedCount++;
+                        }
+                        resultMessages.push(`${item.user}: ${item.success ? '成功' : '失败'} - ${item.message}`);
+                    });
+                }
+                
+                // 显示详细的签到结果
+                if (successCount > 0 && failedCount === 0) {
+                    showToast(`批量签到完成：${successCount}个用户全部签到成功`, 'success');
+                } else if (successCount > 0 && failedCount > 0) {
+                    showToast(`批量签到完成：${successCount}个成功，${failedCount}个失败`, 'warning');
+                } else if (failedCount > 0 && successCount === 0) {
+                    showToast(`批量签到完成：${failedCount}个用户全部签到失败`, 'error');
+                } else {
+                    showToast('批量签到任务已执行', 'info');
+                }
+                
+                // 显示详细结果（可选）
+                if (resultMessages.length > 0) {
+                    console.log('签到详细结果:', resultMessages);
+                }
+                
+                loadSignStats();
+            } else {
+                showToast(response.message, 'error');
+            }
+        },
+        error: function() {
+            hideLoadingToast();
+            showToast('批量签到执行失败', 'error');
+        }
+    });
+}
+
+function signUser(userId, locationId) {
+    showLoadingToast('正在执行签到...');
+    
+    $.ajax({
+        url: '/sign/api/sign_user',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            user_id: userId,
+            location_id: locationId || null
+        }),
+        success: function(response) {
+            hideLoadingToast();
+            if (response.success) {
+                // 检查具体的签到结果
+                if (response.data && response.data.success) {
+                    showToast('签到成功', 'success');
+                } else if (response.data && !response.data.success) {
+                    showToast(`签到失败: ${response.data.message}`, 'error');
+                } else {
+                    showToast('签到任务已执行', 'info');
+                }
+                loadSignStats();
+            } else {
+                showToast(response.message, 'error');
+            }
+        },
+        error: function() {
+            hideLoadingToast();
+            showToast('签到执行失败', 'error');
+        }
+    });
+}
+
+function signSingleUser(userId) {
+    // 确保userId是数字类型
+    const userIndex = parseInt(userId);
+    
+    // 获取第一个位置作为默认位置
+    const firstLocationId = $('#locationSelect option[value!=""]').first().val();
+    signUser(userIndex, firstLocationId);
+}
+
+function viewUserActivities(userId) {
+    window.location.href = '/sign/activities?user_id=' + userId;
+}
+</script>
+{% endblock %} 

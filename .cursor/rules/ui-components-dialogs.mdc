@@ -1,0 +1,94 @@
+---
+alwaysApply: false
+---
+## 自定义弹窗组件
+
+### 可用的弹窗函数
+项目中已定义以下自定义弹窗函数，位于 [app.js](mdc:webpanel/static/js/app.js)：
+
+1. **alertDialog(message, title, type)**
+   - 替换原生 `alert()`
+   - 支持类型：`info`, `warning`, `error`, `success`
+   - 返回 Promise，支持 async/await
+
+2. **confirmDialog(message, title)**
+   - 替换原生 `confirm()`
+   - 返回 Promise<boolean>，支持 async/await
+
+3. **showToast(message, type, duration)**
+   - 非阻塞式提示
+   - 支持类型：`success`, `error`, `warning`, `info`
+   - 默认显示3秒
+
+### 使用示例
+
+#### 成功提示
+```javascript
+async function handleSuccess() {
+    await alertDialog('操作成功完成！', '成功', 'success');
+}
+
+// 或使用Toast（推荐用于非关键提示）
+showToast('数据已保存', 'success');
+```
+
+#### 错误提示
+```javascript
+async function handleError(error) {
+    await alertDialog(`操作失败：${error.message}`, '错误', 'error');
+}
+```
+
+#### 确认操作
+```javascript
+async function deleteItem() {
+    const confirmed = await confirmDialog('确定要删除这个项目吗？此操作不可撤销。', '删除确认');
+    if (confirmed) {
+        // 执行删除操作
+        await performDelete();
+    }
+}
+```
+
+#### 警告提示
+```javascript
+async function showWarning() {
+    await alertDialog('请注意：此操作会影响多个用户', '警告', 'warning');
+}
+```
+
+## 样式和主题
+
+### 设计规范
+- 使用Bootstrap 5模态框组件
+- 遵循项目蓝色主题色彩方案
+- 使用Font Awesome图标系统
+- 支持响应式设计
+
+### 颜色映射
+- `success`: 绿色 (#198754) + ✓ 图标
+- `error`: 红色 (#dc3545) + ⚠ 图标  
+- `warning`: 黄色 (#ffc107) + ⚠ 图标
+- `info`: 蓝色 (#0dcaf0) + ℹ 图标
+
+## 异步处理
+
+### 重要：所有弹窗函数都是异步的
+```javascript
+// ✅ 正确：使用await
+async function handleAction() {
+    const confirmed = await confirmDialog('确定要执行吗？');
+    if (confirmed) {
+        await alertDialog('操作完成', '成功', 'success');
+    }
+}
+
+// ❌ 错误：不使用await可能导致时序问题
+function handleAction() {
+    confirmDialog('确定要执行吗？').then(confirmed => {
+        if (confirmed) {
+            alertDialog('操作完成', '成功', 'success');
+        }
+    });
+}
+```

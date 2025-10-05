@@ -1,0 +1,143 @@
+---
+alwaysApply: false
+---
+# 超星学习通自动签到系统 - 项目架构规范
+
+## 项目结构概览
+
+### 核心目录结构
+```
+chaoxing/
+├── app.py                    # Flask应用主入口
+├── daemon.py                 # 后台守护进程
+├── configs/                  # 配置文件目录
+│   ├── api.py               # API配置
+│   ├── schedule.json        # 定时任务配置
+│   └── storage.json         # 存储配置
+├── functions/               # 核心功能模块
+│   ├── activity.py         # 活动相关功能
+│   ├── sign.py             # 签到功能
+│   ├── user.py             # 用户管理
+│   └── ...
+├── utils/                   # 工具类库
+│   ├── request.py          # HTTP请求工具
+│   ├── schedule_task.py    # 任务调度工具
+│   └── ...
+├── webpanel/               # Web管理面板
+│   ├── app.py              # Web应用入口
+│   ├── blueprints/         # Flask蓝图
+│   ├── templates/          # Jinja2模板
+│   └── static/             # 静态资源
+└── test/                   # 测试文件
+```
+
+## Web面板架构
+
+### Flask应用结构
+- **主应用**: [webpanel/app.py](mdc:webpanel/app.py) - Web面板入口
+- **蓝图系统**: [webpanel/blueprints/](mdc:webpanel/blueprints/) - 模块化路由
+  - `api.py` - API接口
+  - `sign.py` - 签到相关页面
+  - `system.py` - 系统管理页面
+  - `user.py` - 用户管理页面
+
+### 模板系统
+- **基础模板**: [base.html](mdc:webpanel/templates/base.html) - 所有页面的基础模板
+- **页面模板**: 按功能模块组织在对应目录下
+- **静态资源**: [webpanel/static/](mdc:webpanel/static/) - CSS、JS、图片等
+
+### 前端架构
+- **CSS框架**: Bootstrap 5 + 自定义样式
+- **JavaScript**: jQuery + 自定义 [app.js](mdc:webpanel/static/js/app.js)
+- **图标系统**: Font Awesome + Bootstrap Icons
+- **图表库**: Chart.js
+
+## 开发规范
+
+### 文件命名规范
+- **Python文件**: 使用小写字母和下划线 (snake_case)
+- **HTML模板**: 使用小写字母和下划线
+- **JavaScript文件**: 使用小写字母和连字符 (kebab-case)
+- **CSS文件**: 使用小写字母和连字符
+
+### 代码组织原则
+1. **单一职责**: 每个文件/函数只负责一个特定功能
+2. **模块化**: 使用Flask蓝图进行路由模块化
+3. **配置分离**: 配置文件独立于代码
+4. **静态资源分离**: CSS/JS/图片等静态资源独立管理
+
+### 模板继承规范
+所有页面模板必须：
+- 继承 [base.html](mdc:webpanel/templates/base.html)
+- 使用标准的模板块名称
+- 遵循 [template-best-practices.mdc](mdc:template-best-practices.mdc) 规范
+
+### JavaScript规范
+- 使用 [app.js](mdc:webpanel/static/js/app.js) 中定义的全局函数
+- 遵循 [ui-components-dialogs.mdc](mdc:ui-components-dialogs.mdc) 弹窗规范
+- 避免内联JavaScript，统一放在 `{% block extra_js %}` 中
+
+## API设计规范
+
+### RESTful API原则
+- **GET**: 获取数据
+- **POST**: 创建数据
+- **PUT**: 更新数据
+- **DELETE**: 删除数据
+
+### 响应格式
+```json
+{
+    "success": true,
+    "message": "操作成功",
+    "data": {...}
+}
+```
+
+### 错误处理
+- 统一使用HTTP状态码
+- 提供清晰的错误信息
+- 前端统一处理Ajax错误
+
+## 配置管理
+
+### 配置文件组织
+- **API配置**: [configs/api.py](mdc:configs/api.py)
+- **任务调度**: [configs/schedule.json](mdc:configs/schedule.json)
+- **存储配置**: [configs/storage.json](mdc:configs/storage.json)
+
+### 环境变量
+- 敏感信息使用环境变量
+- 提供默认配置值
+- 配置文件不包含密码等敏感信息
+
+## 测试规范
+
+### 测试文件组织
+- **功能测试**: [test/](mdc:test/) 目录
+- **单元测试**: 与功能模块对应
+- **集成测试**: 测试模块间协作
+
+## 部署和维护
+
+### 日志管理
+- **应用日志**: [logs/app.log](mdc:logs/app.log)
+- **守护进程日志**: [logs/daemon.log](mdc:logs/daemon.log)
+- **Web面板日志**: [logs/webpanel.log](mdc:logs/webpanel.log)
+
+### 监控和统计
+- 使用 [utils/monitor.py](mdc:utils/monitor.py) 进行系统监控
+- 统计数据存储在 [configs/daily_stats.json](mdc:configs/daily_stats.json)
+
+## 安全检查
+
+### 安全原则
+- 所有用户输入必须验证
+- 使用CSRF保护
+- 敏感操作需要确认
+- 日志记录重要操作
+
+### 数据保护
+- 密码等敏感信息加密存储
+- Cookie和Session安全配置
+- 定期清理过期数据

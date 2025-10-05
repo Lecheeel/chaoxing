@@ -1,0 +1,232 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# 调试和故障排除指南
+
+## 前端页面无法加载数据的问题排查
+
+### 第一步：检查模板块继承
+这是最常见的问题！检查以下文件的模板块名称：
+
+#### ✅ 检查清单
+1. **用户管理页面**: [user_management.html](mdc:webpanel/templates/user_management.html)
+2. **系统设置页面**: [system_settings.html](mdc:webpanel/templates/system_settings.html)  
+3. **用户添加页面**: [user/add.html](mdc:webpanel/templates/user/add.html)
+
+#### ❌ 常见错误模式
+```html
+<!-- 错误：使用了不存在的块名称 -->
+{% block scripts %}
+<script>
+// JavaScript代码不会被执行！
+</script>
+{% endblock %}
+```
+
+#### ✅ 正确格式
+```html
+<!-- 正确：使用base.html中定义的块名称 -->
+{% block extra_js %}
+<script>
+// JavaScript代码会正确执行
+</script>
+{% endblock %}
+```
+
+### 第二步：检查浏览器控制台
+打开浏览器开发者工具(F12)，查看：
+
+1. **控制台错误**: 是否有JavaScript错误
+2. **网络请求**: API请求是否发送
+3. **响应数据**: API是否返回正确数据
+
+#### 常见错误信息
+```
+ReferenceError: showToast is not defined
+TypeError: Cannot read property 'forEach' of undefined  
+404 Not Found (API端点不存在)
+```
+
+### 第三步：验证API功能
+使用命令行测试API是否正常工作：
+
+```bash
+# 测试用户统计API
+curl -X GET "http://localhost:5000/user/api/stats"
+
+# 预期响应
+{
+    "success": true,
+    "data": {
+        "total": 1,
+        "active": 0, 
+        "inactive": 1
+    }
+}
+```
+
+### 第四步：检查数据文件
+验证 [storage.json](mdc:storage.json) 文件：
+
+```bash
+# 检查文件是否存在
+ls -la storage.json
+
+# 验证JSON格式
+python -m json.tool storage.json
+```
+
+## 常见问题及解决方案
+
+### 问题1：页面显示加载中但永不完成
+**症状**: 页面显示spinner或"-"，不显示实际数据
+
+**原因**: 
+- 模板块名称错误导致JavaScript未加载
+- API请求失败
+- 数据解析错误
+
+**解决步骤**:
+1. 检查模板是否使用 `{% block extra_js %}`
+2. 查看浏览器控制台错误
+3. 测试API响应
+4. 验证数据格式
+
+### 问题2：JavaScript函数未定义错误
+**症状**: `showToast is not defined` 等错误
+
+**原因**: 
+- [app.js](mdc:webpanel/static/js/app.js) 未正确加载
+- 函数定义顺序问题
+
+**解决方案**:
+```javascript
+// 添加函数存在性检查
+if (typeof showToast === 'function') {
+    showToast('消息', 'success');
+} else {
+    console.log('showToast函数未定义');
+    alert('消息'); // fallback
+}
+```
+
+### 问题3：API返回数据但前端不显示
+**症状**: API测试正常，但页面不显示数据
+
+**原因**:
+- 数据渲染逻辑错误
+- DOM元素选择器错误
+- 数据字段名不匹配
+
+**调试代码**:
+```javascript
+$.get('/user/api/stats')
+    .done(function(response) {
+        console.log('=== API响应调试信息 ===');
+        console.log('响应对象:', response);
+        console.log('success:', response.success);
+        console.log('data:', response.data);
+        
+        // 检查每个字段
+        if (response.data) {
+            console.log('total:', response.data.total);
+            console.log('active:', response.data.active); 
+            console.log('inactive:', response.data.inactive);
+        }
+    });
+```
+
+## 系统健康检查脚本
+
+### Python健康检查
+```python
+# health_check.py
+import json
+import os
+import requests
+
+def check_storage_file():
+    """检查存储文件"""
+    if not os.path.exists('storage.json'):
+        print("❌ storage.json 文件不存在")
+        return False
+    
+    try:
+        with open('storage.json', 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        print("✅ storage.json 文件格式正确")
+        print(f"   用户数量: {len(data.get('users', []))}")
+        return True
+    except Exception as e:
+        print(f"❌ storage.json 文件错误: {e}")
+        return False
+
+def check_api_endpoints():
+    """检查API端点"""
+    endpoints = [
+        'http://localhost:5000/user/api/stats',
+        'http://localhost:5000/user/api/users'
+    ]
+    
+    for endpoint in endpoints:
+        try:
+            response = requests.get(endpoint, timeout=5)
+            if response.status_code == 200:
+                print(f"✅ {endpoint} - 正常")
+            else:
+                print(f"❌ {endpoint} - 状态码: {response.status_code}")
+        except Exception as e:
+            print(f"❌ {endpoint} - 错误: {e}")
+
+if __name__ == "__main__":
+    print("=== 系统健康检查 ===")
+    check_storage_file()
+    print()
+    check_api_endpoints()
+```
+
+## 模板验证脚本
+
+### 检查所有模板文件
+```python
+# template_checker.py
+import os
+import re
+
+def check_template_blocks(template_path):
+    """检查模板块命名"""
+    try:
+        with open(template_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # 查找所有块定义
+        blocks = re.findall(r'{%\s*block\s+(\w+)\s*%}', content)
+        
+        # 检查常见错误
+        issues = []
+        if 'scripts' in blocks:
+            issues.append("❌ 使用了 'scripts' 块，应该使用 'extra_js'")
+        if 'styles' in blocks:
+            issues.append("❌ 使用了 'styles' 块，应该使用 'extra_css'")
+        
+        if issues:
+            print(f"\n文件: {template_path}")
+            for issue in issues:
+                print(f"  {issue}")
+        else:
+            print(f"✅ {template_path} - 模板块正确")
+            
+    except Exception as e:
+        print(f"❌ {template_path} - 读取错误: {e}")
+
+# 检查所有模板文件
+template_dir = "webpanel/templates"
+for root, dirs, files in os.walk(template_dir):
+    for file in files:
+        if file.endswith('.html'):
+            template_path = os.path.join(root, file)
+            check_template_blocks(template_path)
+```
+

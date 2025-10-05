@@ -1,0 +1,498 @@
+{% extends "base.html" %}
+
+{% block title %}手动签到 - 超星学习通自动签到系统{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="h3 mb-0">
+                <i class="fas fa-hand-pointer me-2 text-primary"></i>
+                手动签到
+            </h1>
+            <div class="btn-group" role="group">
+                <a href="{{ url_for('sign.index') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-1"></i>返回概览
+                </a>
+                <a href="{{ url_for('sign.activities') }}" class="btn btn-outline-info">
+                    <i class="fas fa-list me-1"></i>活动列表
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 签到选项卡 -->
+<div class="row">
+    <div class="col-12">
+        <nav>
+            <div class="nav nav-tabs" id="signTabs" role="tablist">
+                <button class="nav-link active" id="batch-tab" data-bs-toggle="tab" data-bs-target="#batch" type="button" role="tab">
+                    <i class="fas fa-users me-1"></i>批量签到
+                </button>
+                <button class="nav-link" id="single-tab" data-bs-toggle="tab" data-bs-target="#single" type="button" role="tab">
+                    <i class="fas fa-user me-1"></i>单用户签到
+                </button>
+            </div>
+        </nav>
+        
+        <div class="tab-content" id="signTabsContent">
+            <!-- 批量签到 -->
+            <div class="tab-pane fade show active" id="batch" role="tabpanel">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <i class="fas fa-users text-primary me-2"></i>批量签到设置
+                        </h5>
+                        <form id="batchSignForm">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="batchLocation" class="form-label">签到位置（可选）</label>
+                                        <select class="form-select" id="batchLocation">
+                                            <option value="">使用默认位置</option>
+                                            {% for location in locations %}
+                                            <option value="{{ location.id }}" {% if loop.first %}selected{% endif %}>{{ location.name }} - {{ location.address }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="batchDelay" class="form-label">签到延迟（秒）</label>
+                                        <input type="number" class="form-control" id="batchDelay" min="0" max="300" value="0" 
+                                               placeholder="0表示立即签到">
+                                        <div class="form-text">建议设置3-10秒的延迟，避免被系统检测</div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-primary btn-lg">
+                                    <i class="fas fa-play me-2"></i>开始批量签到（{{ users|length }}个用户）
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 单用户签到 -->
+            <div class="tab-pane fade" id="single" role="tabpanel">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <i class="fas fa-user text-info me-2"></i>单用户签到设置
+                        </h5>
+                        <form id="singleSignForm">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="singleUser" class="form-label">选择用户</label>
+                                        <select class="form-select" id="singleUser" required>
+                                            <option value="">请选择用户</option>
+                                            {% for user in users %}
+                                            <option value="{{ loop.index0 }}">{{ user.username or user.name or '未知用户' }} ({{ user.phone }})</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="singleLocation" class="form-label">签到位置（可选）</label>
+                                        <select class="form-select" id="singleLocation">
+                                            <option value="">使用默认位置</option>
+                                            {% for location in locations %}
+                                            <option value="{{ location.id }}" {% if loop.first %}selected{% endif %}>{{ location.name }} - {{ location.address }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-info btn-lg">
+                                    <i class="fas fa-user-check me-2"></i>执行签到
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 用户状态表格 -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card shadow">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-users me-2"></i>用户签到状态
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead class="table-dark">
+                            <tr>
+                                <th width="20%">用户</th>
+                                <th width="25%">状态</th>
+                                <th width="25%">最后签到时间</th>
+                                <th width="30%">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if users %}
+                                {% for user in users %}
+                                <tr id="user-row-{{ loop.index0 }}">
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <div class="avatar bg-primary text-white rounded-circle me-2 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                                                {{ (user.username or user.name or '未知用户')[0] }}
+                                            </div>
+                                            <div>
+                                                <div class="fw-bold">{{ user.username or user.name or '未知用户' }}</div>
+                                                <small class="text-muted">{{ user.phone }}</small>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-success user-status" data-user-id="{{ loop.index0 }}">
+                                            <i class="fas fa-check-circle me-1"></i>正常
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="text-muted last-sign-time" data-user-id="{{ loop.index0 }}">
+                                            {{ user.last_sign_time or '暂无记录' }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            <button class="btn btn-outline-primary" onclick="signSingleUserWithDefaultLocation({{ loop.index0 }}, '{{ user.username or user.name or '未知用户' }}')">
+                                                <i class="fas fa-play me-1"></i>签到
+                                            </button>
+                                            <button class="btn btn-outline-info" onclick="checkUserActivities({{ loop.index0 }})">
+                                                <i class="fas fa-search me-1"></i>查看活动
+                                            </button>
+                                            <button class="btn btn-outline-secondary" onclick="refreshUserStatus({{ loop.index0 }})">
+                                                <i class="fas fa-sync-alt me-1"></i>刷新
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted py-4">
+                                        <i class="fas fa-users fa-3x mb-3 d-block"></i>
+                                        暂无用户，请先
+                                        <a href="{{ url_for('user.add') }}" class="text-decoration-none">添加用户</a>
+                                    </td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // 批量签到表单
+    $('#batchSignForm').on('submit', function(e) {
+        e.preventDefault();
+        executeBatchSign();
+    });
+    
+    // 单用户签到表单
+    $('#singleSignForm').on('submit', function(e) {
+        e.preventDefault();
+        executeSingleSign();
+    });
+    
+    // 定期刷新用户状态
+    setInterval(refreshAllUserStatus, 30000);
+});
+
+async function executeBatchSign() {
+    const locationId = $('#batchLocation').val();
+    const delay = parseInt($('#batchDelay').val()) || 0;
+    
+    const confirmed = await confirmDialog(`确定要为所有 {{ users|length }} 个用户执行签到吗？`, '批量签到');
+    if (!confirmed) {
+        return;
+    }
+    
+    showLoadingToast('正在执行批量签到...');
+    
+    // 更新所有用户状态为签到中
+    $('.user-status').removeClass('bg-success bg-danger bg-warning')
+                     .addClass('bg-warning')
+                     .html('<i class="fas fa-spinner fa-spin me-1"></i>签到中');
+    
+    $.ajax({
+        url: '/sign/api/sign_all',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            location_id: locationId,
+            delay: delay
+        }),
+        success: function(response) {
+            hideLoadingToast();
+            if (response.success) {
+                // 统计成功和失败的数量
+                let successCount = 0;
+                let failedCount = 0;
+                
+                if (response.data && Array.isArray(response.data)) {
+                    response.data.forEach(function(item) {
+                        if (item.success) {
+                            successCount++;
+                        } else {
+                            failedCount++;
+                        }
+                    });
+                }
+                
+                // 显示详细的签到结果
+                if (successCount > 0 && failedCount === 0) {
+                    showToast(`批量签到完成：${successCount}个用户全部签到成功`, 'success');
+                } else if (successCount > 0 && failedCount > 0) {
+                    showToast(`批量签到完成：${successCount}个成功，${failedCount}个失败`, 'warning');
+                } else if (failedCount > 0 && successCount === 0) {
+                    showToast(`批量签到完成：${failedCount}个用户全部签到失败`, 'error');
+                } else {
+                    showToast('批量签到任务已执行', 'info');
+                }
+                
+                // 延迟刷新状态
+                setTimeout(refreshAllUserStatus, 2000);
+            } else {
+                showToast(response.message, 'error');
+                refreshAllUserStatus();
+            }
+        },
+        error: function() {
+            hideLoadingToast();
+            showToast('批量签到执行失败', 'error');
+            refreshAllUserStatus();
+        }
+    });
+}
+
+function executeSingleSign() {
+    const userId = $('#singleUser').val();
+    const locationId = $('#singleLocation').val();
+    
+    if (!userId || userId === '') {
+        showToast('请选择用户', 'warning');
+        return;
+    }
+    
+    const userName = $('#singleUser option:selected').text();
+    // 将字符串转换为数字索引
+    const userIndex = parseInt(userId);
+    signSingleUser(userIndex, userName, locationId);
+}
+
+function signSingleUserWithDefaultLocation(userId, userName) {
+    // 获取第一个位置作为默认位置
+    const firstLocationId = $('#batchLocation option[value!=""]').first().val();
+    signSingleUser(userId, userName, firstLocationId);
+}
+
+function signSingleUser(userId, userName, locationId = null) {
+    showLoadingToast(`正在为 ${userName} 执行签到...`);
+    
+    // 更新用户状态为签到中
+    $(`.user-status[data-user-id="${userId}"]`)
+        .removeClass('bg-success bg-danger bg-warning')
+        .addClass('bg-warning')
+        .html('<i class="fas fa-spinner fa-spin me-1"></i>签到中');
+    
+    $.ajax({
+        url: '/sign/api/sign_user',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            user_id: userId,
+            location_id: locationId
+        }),
+        success: function(response) {
+            hideLoadingToast();
+            if (response.success) {
+                // 检查具体的签到结果
+                if (response.data && response.data.success) {
+                    showToast(`${userName} 签到成功`, 'success');
+                    // 更新状态为成功
+                    $(`.user-status[data-user-id="${userId}"]`)
+                        .removeClass('bg-warning bg-danger')
+                        .addClass('bg-success')
+                        .html('<i class="fas fa-check-circle me-1"></i>签到成功');
+                } else if (response.data && !response.data.success) {
+                    showToast(`${userName} 签到失败: ${response.data.message}`, 'error');
+                    updateUserStatus(userId, 'error', response.data.message);
+                } else {
+                    showToast(`${userName} 签到任务已执行`, 'info');
+                    // 更新状态为未知
+                    $(`.user-status[data-user-id="${userId}"]`)
+                        .removeClass('bg-warning bg-danger')
+                        .addClass('bg-info')
+                        .html('<i class="fas fa-question-circle me-1"></i>状态未知');
+                }
+                
+                // 更新最后签到时间
+                $(`.last-sign-time[data-user-id="${userId}"]`).text(new Date().toLocaleString());
+            } else {
+                showToast(`${userName} 签到失败: ${response.message}`, 'error');
+                updateUserStatus(userId, 'error', response.message);
+            }
+        },
+        error: function() {
+            hideLoadingToast();
+            showToast(`${userName} 签到执行失败`, 'error');
+            updateUserStatus(userId, 'error', '网络错误');
+        }
+    });
+}
+
+function checkUserActivities(userId) {
+    showLoadingToast('正在获取用户活动...');
+    
+    $.get(`/sign/api/activities/${userId}`)
+        .done(function(response) {
+            hideLoadingToast();
+            if (response.success) {
+                showActivitiesModal(response.data);
+            } else {
+                showToast('获取用户活动失败', 'error');
+            }
+        })
+        .fail(function() {
+            hideLoadingToast();
+            showToast('获取用户活动失败', 'error');
+        });
+}
+
+function showActivitiesModal(activities) {
+    let modalHtml = `
+        <div class="modal fade" id="activitiesModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <i class="fas fa-list me-2"></i>用户活动列表
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+    `;
+    
+    if (activities.length > 0) {
+        modalHtml += `
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>活动名称</th>
+                            <th>课程</th>
+                            <th>状态</th>
+                            <th>开始时间</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+        
+        activities.forEach(activity => {
+            modalHtml += `
+                <tr>
+                    <td>${activity.name}</td>
+                    <td>${activity.course_name}</td>
+                    <td><span class="badge bg-primary">${activity.status}</span></td>
+                    <td>${activity.start_time}</td>
+                </tr>
+            `;
+        });
+        
+        modalHtml += `
+                    </tbody>
+                </table>
+            </div>
+        `;
+    } else {
+        modalHtml += `
+            <div class="text-center text-muted py-4">
+                <i class="fas fa-inbox fa-3x mb-3 d-block"></i>
+                暂无活动
+            </div>
+        `;
+    }
+    
+    modalHtml += `
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // 移除现有模态框
+    $('#activitiesModal').remove();
+    
+    // 添加新模态框
+    $('body').append(modalHtml);
+    
+    // 显示模态框
+    const modal = new bootstrap.Modal($('#activitiesModal')[0]);
+    modal.show();
+}
+
+function refreshUserStatus(userId) {
+    // 这里可以实现具体的用户状态刷新逻辑
+    showToast('状态已刷新', 'info');
+}
+
+function refreshAllUserStatus() {
+    // 重置所有用户状态为正常
+    $('.user-status').removeClass('bg-warning bg-danger')
+                     .addClass('bg-success')
+                     .html('<i class="fas fa-check-circle me-1"></i>正常');
+}
+
+function updateUserStatus(userId, status, message = '') {
+    const $statusElement = $(`.user-status[data-user-id="${userId}"]`);
+    
+    switch (status) {
+        case 'success':
+            $statusElement.removeClass('bg-warning bg-danger')
+                         .addClass('bg-success')
+                         .html('<i class="fas fa-check-circle me-1"></i>签到成功');
+            break;
+        case 'error':
+            $statusElement.removeClass('bg-warning bg-success')
+                         .addClass('bg-danger')
+                         .html(`<i class="fas fa-times-circle me-1"></i>失败`)
+                         .attr('title', message);
+            break;
+        case 'loading':
+            $statusElement.removeClass('bg-success bg-danger')
+                         .addClass('bg-warning')
+                         .html('<i class="fas fa-spinner fa-spin me-1"></i>处理中');
+            break;
+        default:
+            $statusElement.removeClass('bg-warning bg-danger')
+                         .addClass('bg-success')
+                         .html('<i class="fas fa-check-circle me-1"></i>正常');
+    }
+}
+</script>
+{% endblock %} 

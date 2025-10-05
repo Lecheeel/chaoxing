@@ -1,8 +1,8 @@
-# 超星学习通Web管理面板
-from flask import Flask, jsonify, request, render_template
-from flask_cors import CORS
-import os
-import sys
+# -*- coding: utf-8 -*-
+"""
+超星学习通自动签到系统 - Web管理面板
+"""
 
-# 确保可以导入主项目模块
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) 
+__version__ = '1.0.0'
+__author__ = 'Assistant'
+__description__ = '超星学习通自动签到系统Web管理界面' 

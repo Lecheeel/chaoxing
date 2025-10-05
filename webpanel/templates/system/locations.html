@@ -1,0 +1,650 @@
+{% extends "base.html" %}
+
+{% block title %}位置管理 - 超星学习通自动签到系统{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder@1.13.0/dist/Control.Geocoder.css" />
+<style>
+.location-card {
+    transition: all 0.3s ease;
+}
+.location-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+.location-info {
+    font-size: 0.875rem;
+}
+.coordinate-info {
+    background-color: #f8f9fa;
+    border-radius: 0.375rem;
+    padding: 0.5rem;
+    font-family: 'Courier New', monospace;
+}
+.map-container {
+    height: 450px;
+    border-radius: 0.375rem;
+    overflow: hidden;
+    position: relative;
+    z-index: 1;
+}
+.map-container div {
+    height: 100% !important;
+    width: 100% !important;
+    position: relative !important;
+    z-index: 1 !important;
+}
+.map-container .leaflet-container {
+    height: 100% !important;
+    width: 100% !important;
+    position: relative !important;
+    z-index: 1 !important;
+}
+
+/* 提高模态框层级，确保在地图之上 */
+/*
+.modal {
+    z-index: 1050;
+}
+*/
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">
+        <i class="fas fa-map-marker-alt me-2 text-primary"></i>
+        位置管理
+    </h1>
+    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addLocationModal">
+        <i class="fas fa-plus me-1"></i>添加位置
+    </button>
+</div>
+
+<!-- 位置列表 -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-0">
+                <h5 class="mb-0">
+                    <i class="fas fa-list me-2"></i>位置列表
+                </h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th width="20%">位置名称</th>
+                                <th width="30%">地址</th>
+                                <th width="20%">坐标</th>
+                                <th width="15%">创建时间</th>
+                                <th width="15%">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="locations-table-body">
+                            <tr>
+                                <td colspan="5" class="text-center py-4">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">加载中...</span>
+                                    </div>
+                                    <div class="mt-2">正在加载位置列表...</div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 添加位置模态框 -->
+<div class="modal fade" id="addLocationModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-plus me-2 text-primary"></i>
+                    添加新位置
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addLocationForm">
+                    <div class="row">
+                        <div class="col-lg-7">
+                            <div class="mb-3">
+                                <label class="form-label">地图选择</label>
+                                <div class="map-container border">
+                                    <div id="locationMap" style="height: 100%; width: 100%;"></div>
+                                </div>
+                                <small class="form-text text-muted">在地图上搜索或点击选择位置，或手动输入坐标</small>
+                            </div>
+                        </div>
+                        <div class="col-lg-5">
+                            <div class="mb-3">
+                                <label for="locationName" class="form-label">位置名称 <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="locationName" name="name" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="locationAddress" class="form-label">详细地址 <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="locationAddress" name="address" required>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="locationLon" class="form-label">经度 <span class="text-danger">*</span></label>
+                                        <input type="number" class="form-control" id="locationLon" name="lon" step="any" required>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="locationLat" class="form-label">纬度 <span class="text-danger">*</span></label>
+                                        <input type="number" class="form-control" id="locationLat" name="lat" step="any" required>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- <div class="mb-3">
+                                <label for="locationDescription" class="form-label">位置描述</label>
+                                <textarea class="form-control" id="locationDescription" name="description" rows="3"></textarea>
+                            </div> -->
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="submit" class="btn btn-primary" form="addLocationForm">
+                    <i class="fas fa-save me-1"></i>保存位置
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 编辑位置模态框 -->
+<div class="modal fade" id="editLocationModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-edit me-2 text-primary"></i>
+                    编辑位置
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editLocationForm">
+                    <input type="hidden" id="editLocationId" name="id">
+                    <div class="row">
+                        <div class="col-lg-7">
+                            <div class="mb-3">
+                                <label class="form-label">地图选择</label>
+                                <div class="map-container border">
+                                    <div id="editLocationMap" style="height: 100%; width: 100%;"></div>
+                                </div>
+                                <small class="form-text text-muted">在地图上搜索或点击选择位置，或手动输入坐标</small>
+                            </div>
+                        </div>
+                        <div class="col-lg-5">
+                            <div class="mb-3">
+                                <label for="editLocationName" class="form-label">位置名称 <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="editLocationName" name="name" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="editLocationAddress" class="form-label">详细地址 <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="editLocationAddress" name="address" required>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="editLocationLon" class="form-label">经度 <span class="text-danger">*</span></label>
+                                        <input type="number" class="form-control" id="editLocationLon" name="lon" step="any" required>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="editLocationLat" class="form-label">纬度 <span class="text-danger">*</span></label>
+                                        <input type="number" class="form-control" id="editLocationLat" name="lat" step="any" required>
+                                    </div>
+                                </div>
+                                
+                            </div>
+                            <!-- <div class="mb-3">
+                                <label for="editLocationDescription" class="form-label">位置描述</label>
+                                <textarea class="form-control" id="editLocationDescription" name="description" rows="3"></textarea>
+                            </div> -->
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="submit" class="btn btn-primary" form="editLocationForm">
+                    <i class="fas fa-save me-1"></i>更新位置
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 删除位置确认模态框 -->
+<div class="modal fade" id="deleteLocationModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle me-2 text-warning"></i>
+                    确认删除位置
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>确定要删除位置 <strong id="delete-location-name"></strong> 吗？</p>
+                <p class="text-muted small">此操作不可撤销，删除后位置信息将永久丢失。</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteBtn">
+                    <i class="fas fa-trash me-1"></i>确认删除
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Leaflet地图库 -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Leaflet Geocoder -->
+<script src="https://unpkg.com/leaflet-control-geocoder@1.13.0/dist/Control.Geocoder.js"></script>
+<script>
+let locations = [];
+let currentEditId = null;
+let addMapPicker = null;
+let editMapPicker = null;
+
+// 地图选择器类
+class MapLocationPicker {
+    constructor(mapId, latInput, lonInput, addressInput) {
+        this.mapId = mapId;
+        this.latInput = $(latInput);
+        this.lonInput = $(lonInput);
+        this.addressInput = $(addressInput);
+        this.map = null;
+        this.marker = null;
+        this.defaultCoords = [39.90923, 116.397428]; // 默认北京
+    }
+
+    init(initialCoords) {
+        const coords = initialCoords || this.defaultCoords;
+        this.map = L.map(this.mapId).setView(coords, 15);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(this.map);
+
+        L.Control.geocoder({
+            defaultMarkGeocode: false
+        })
+        .on('markgeocode', (e) => {
+            const latlng = e.geocode.center;
+            this.map.setView(latlng, 16);
+            this.updateMarker(latlng, e.geocode.name);
+        })
+        .addTo(this.map);
+
+        this.map.on('click', (e) => this.updateMarker(e.latlng));
+
+        this.latInput.add(this.lonInput).on('input', () => {
+            const lat = parseFloat(this.latInput.val());
+            const lon = parseFloat(this.lonInput.val());
+            if (!isNaN(lat) && !isNaN(lon)) {
+                const latlng = { lat, lng: lon };
+                this.map.setView(latlng, this.map.getZoom() || 16);
+                this.updateMarker(latlng, null, false);
+            }
+        });
+
+        if (initialCoords) {
+            this.updateMarker({ lat: initialCoords[0], lng: initialCoords[1] }, this.addressInput.val() || null, false);
+        }
+        
+        // 确保地图在模态框中正确显示
+        setTimeout(() => {
+            if (this.map) {
+                this.map.invalidateSize()
+            }
+        }, 100);
+    }
+
+    updateMarker(latlng, address = null, doReverseGeocode = true) {
+        this.latInput.val(latlng.lat.toFixed(6));
+        this.lonInput.val(latlng.lng.toFixed(6));
+
+        if (this.marker) {
+            this.map.removeLayer(this.marker);
+        }
+        this.marker = L.marker(latlng).addTo(this.map);
+
+        if (address) {
+            this.addressInput.val(address);
+        } else if (doReverseGeocode) {
+            fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latlng.lat}&lon=${latlng.lng}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.display_name) {
+                        this.addressInput.val(data.display_name);
+                    }
+                })
+                .catch(error => console.warn('逆地理编码失败:', error));
+        }
+    }
+
+    destroy() {
+        if (this.map) {
+            this.map.remove();
+            this.map = null;
+        }
+    }
+}
+
+
+// 页面加载时初始化
+$(document).ready(function() {
+    loadLocations();
+    
+    // 模态框事件监听
+    $('#addLocationModal').on('shown.bs.modal', function() {
+        if (addMapPicker) addMapPicker.destroy();
+        addMapPicker = new MapLocationPicker('locationMap', '#locationLat', '#locationLon', '#locationAddress');
+        addMapPicker.init();
+    }).on('hidden.bs.modal', function () {
+        if (addMapPicker) {
+            addMapPicker.destroy();
+            addMapPicker = null;
+        }
+    });
+    
+    $('#editLocationModal').on('shown.bs.modal', function() {
+        const location = locations[currentEditId];
+        if (location) {
+            if (editMapPicker) editMapPicker.destroy();
+            editMapPicker = new MapLocationPicker('editLocationMap', '#editLocationLat', '#editLocationLon', '#editLocationAddress');
+            editMapPicker.init([location.lat, location.lon]);
+        }
+    }).on('hidden.bs.modal', function () {
+        if (editMapPicker) {
+            editMapPicker.destroy();
+            editMapPicker = null;
+        }
+    });
+
+    // 表单提交事件
+    $('#addLocationForm').on('submit', function(e) {
+        e.preventDefault();
+        addLocation();
+    });
+
+    $('#editLocationForm').on('submit', function(e) {
+        e.preventDefault();
+        updateLocation();
+    });
+
+    // 删除按钮事件
+    $('#confirmDeleteBtn').on('click', confirmDeleteLocation);
+
+    // 事件委托处理编辑和删除按钮
+    $('#locations-table-body').on('click', '.edit-location-btn', function() {
+        const index = $(this).data('location-index');
+        editLocation(index);
+    });
+
+    $('#locations-table-body').on('click', '.delete-location-btn', function() {
+        const index = $(this).data('location-index');
+        deleteLocation(index);
+    });
+});
+
+// 加载位置列表
+function loadLocations() {
+    $.get('/system/api/locations')
+        .done(function(response) {
+            if (response.success) {
+                locations = response.data;
+                displayLocations(response.data);
+            } else {
+                showError('获取位置列表失败: ' + response.message);
+            }
+        })
+        .fail(function() {
+            $('#locations-table-body').html(`
+                <tr>
+                    <td colspan="5" class="text-center py-4 text-muted">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        加载位置列表失败
+                    </td>
+                </tr>
+            `);
+        });
+}
+
+// 显示位置列表
+function displayLocations(locationList) {
+    const tbody = $('#locations-table-body');
+    
+    if (!locationList || locationList.length === 0) {
+        tbody.html(`
+            <tr>
+                <td colspan="5" class="text-center py-4 text-muted">
+                    <i class="fas fa-map-marker-alt me-2"></i>
+                    暂无位置信息
+                </td>
+            </tr>
+        `);
+        return;
+    }
+    
+    let html = '';
+    locationList.forEach((location, index) => {
+        const createdTime = new Date(location.created_at).toLocaleString();
+        const coordinates = `${location.lat}, ${location.lon}`;
+        
+        html += `
+            <tr>
+                <td>
+                    <div class="fw-bold">${location.name}</div>
+                    ${location.description ? `<small class="text-muted">${location.description}</small>` : ''}
+                </td>
+                <td>
+                    <div class="location-info">${location.address}</div>
+                </td>
+                <td>
+                    <div class="coordinate-info">${coordinates}</div>
+                </td>
+                <td>
+                    <small class="text-muted">${createdTime}</small>
+                </td>
+                <td>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-primary edit-location-btn" data-location-index="${index}" title="编辑">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-outline-danger delete-location-btn" data-location-index="${index}" title="删除">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    });
+    
+    tbody.html(html);
+}
+
+// 添加位置
+function addLocation() {
+    const formData = {
+        name: $('#locationName').val(),
+        address: $('#locationAddress').val(),
+        lat: parseFloat($('#locationLat').val()),
+        lon: parseFloat($('#locationLon').val()),
+        description: $('#locationDescription').val()
+    };
+    
+    // 验证必填字段
+    if (!formData.name || !formData.address || isNaN(formData.lat) || isNaN(formData.lon)) {
+        showError('请填写所有必填字段');
+        return;
+    }
+    
+    $.ajax({
+        url: '/system/api/locations',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(formData),
+        success: function(response) {
+            if (response.success) {
+                showSuccess('位置添加成功');
+                $('#addLocationModal').modal('hide');
+                $('#addLocationForm')[0].reset();
+                loadLocations();
+            } else {
+                showError('添加位置失败: ' + response.message);
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error('Ajax Error:', error);
+            showError('添加位置失败: ' + error);
+        }
+    });
+}
+
+// 编辑位置
+function editLocation(index) {
+    const location = locations[index];
+    currentEditId = index;
+    
+    $('#editLocationId').val(index);
+    $('#editLocationName').val(location.name);
+    $('#editLocationAddress').val(location.address);
+    $('#editLocationLat').val(location.lat);
+    $('#editLocationLon').val(location.lon);
+    $('#editLocationDescription').val(location.description || '');
+    
+    $('#editLocationModal').modal('show');
+}
+
+// 更新位置
+function updateLocation() {
+    const formData = {
+        name: $('#editLocationName').val(),
+        address: $('#editLocationAddress').val(),
+        lat: parseFloat($('#editLocationLat').val()),
+        lon: parseFloat($('#editLocationLon').val()),
+        description: $('#editLocationDescription').val()
+    };
+    
+    // 验证必填字段
+    if (!formData.name || !formData.address || isNaN(formData.lat) || isNaN(formData.lon)) {
+        showError('请填写所有必填字段');
+        return;
+    }
+    
+    $.ajax({
+        url: `/system/api/locations/${currentEditId}`,
+        method: 'PUT',
+        contentType: 'application/json',
+        data: JSON.stringify(formData),
+        success: function(response) {
+            if (response.success) {
+                showSuccess('位置更新成功');
+                $('#editLocationModal').modal('hide');
+                loadLocations();
+            } else {
+                showError('更新位置失败: ' + response.message);
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error('Ajax Error:', error);
+            showError('更新位置失败: ' + error);
+        }
+    });
+}
+
+// 删除位置
+function deleteLocation(index) {
+    const location = locations[index];
+    $('#delete-location-name').text(location.name);
+    currentEditId = index;
+    $('#deleteLocationModal').modal('show');
+}
+
+// 确认删除位置
+function confirmDeleteLocation() {
+    $.ajax({
+        url: `/system/api/locations/${currentEditId}`,
+        method: 'DELETE',
+        success: function(response) {
+            if (response.success) {
+                showSuccess('位置删除成功');
+                $('#deleteLocationModal').modal('hide');
+                loadLocations();
+            } else {
+                showError('删除位置失败: ' + response.message);
+            }
+        },
+        error: function() {
+            showError('删除位置失败');
+        }
+    });
+}
+
+// 消息提示函数
+function showSuccess(message) {
+    const toastHtml = `
+        <div class="toast align-items-center text-white bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body">
+                    <i class="fas fa-check-circle me-2"></i>${message}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        </div>
+    `;
+    
+    if (!$('#toast-container').length) {
+        $('body').append('<div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>');
+    }
+    
+    $('#toast-container').append(toastHtml);
+    const toast = new bootstrap.Toast($('#toast-container .toast').last()[0]);
+    toast.show();
+}
+
+function showError(message) {
+    const toastHtml = `
+        <div class="toast align-items-center text-white bg-danger border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body">
+                    <i class="fas fa-exclamation-circle me-2"></i>${message}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        </div>
+    `;
+    
+    if (!$('#toast-container').length) {
+        $('body').append('<div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>');
+    }
+    
+    $('#toast-container').append(toastHtml);
+    const toast = new bootstrap.Toast($('#toast-container .toast').last()[0]);
+    toast.show();
+}
+</script>
+{% endblock %}

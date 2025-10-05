@@ -1,0 +1,80 @@
+---
+alwaysApply: false
+---
+# Flask 模板最佳实践规则
+
+## 模板块命名规范
+
+### 必须使用的标准块名称
+- **JavaScript块**: 必须使用 `{% block extra_js %}{% endblock %}` 
+- **CSS块**: 必须使用 `{% block extra_css %}{% endblock %}`
+- **页面标题**: 使用 `{% block title %}{% endblock %}`
+- **主要内容**: 使用 `{% block content %}{% endblock %}`
+
+### ❌ 常见错误
+```html
+<!-- 错误: 使用了不存在的块名称 -->
+{% block scripts %}
+<script>...</script>
+{% endblock %}
+
+{% block styles %}
+<style>...</style>
+{% endblock %}
+```
+
+### ✅ 正确做法
+```html
+<!-- 正确: 使用标准块名称 -->
+{% block extra_js %}
+<script>...</script>
+{% endblock %}
+
+{% block extra_css %}
+<style>...</style>
+{% endblock %}
+```
+
+## 基础模板参考
+基础模板 [base.html](mdc:webpanel/templates/base.html) 定义了以下可用块：
+- `title` - 页面标题
+- `extra_css` - 额外CSS样式
+- `content` - 主要页面内容  
+- `extra_js` - 额外JavaScript代码
+
+## JavaScript代码组织规范
+
+### ✅ 推荐结构
+```html
+{% extends "base.html" %}
+
+{% block content %}
+<!-- HTML内容 -->
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// JavaScript代码
+</script>
+{% endblock %}
+```
+
+### ❌ 避免的做法
+```html
+{% block content %}
+<!-- HTML内容 -->
+<script>
+// ❌ 不要在content块中放置JavaScript
+</script>
+{% endblock %}
+```
+
+## 检查清单
+在创建或修改模板时，请确认：
+- [ ] 使用了正确的块名称（参考base.html）
+- [ ] JavaScript代码放在 `{% block extra_js %}` 中
+- [ ] CSS代码放在 `{% block extra_css %}` 中
+- [ ] 模板正确继承了base.html
+- [ ] 所有块都正确关闭
+
+- 禁止模拟数据、临时解决方案、演示数据

@@ -208,7 +208,7 @@ def preset_address_choices(preset_address=None):
     choices = []
     for i, address in enumerate(preset_address):
         choices.append({
-            'title': f"{address['lon']},{address['lat']}/{address['address']}",
+            'title': f"{address['lat']},{address['lon']}/{address['address']}",
             'value': i,
         })
     
@@ -349,8 +349,8 @@ def handle_location_sign(params, activity, configs, name, preset_item=None, addr
         
         match = re.match(r'([\d.]*),([\d.]*)\/(\S*)', address_info)
         if match:
-            lon = match.group(1)
-            lat = match.group(2)
+            lat = match.group(1)
+            lon = match.group(2)
             address = match.group(3)
             
             # 随机偏移坐标

@@ -1,0 +1,331 @@
+{% extends "base.html" %}
+
+{% block title %}添加用户 - 超星学习通签到系统{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2 class="mb-0">
+                    <i class="fas fa-user-plus text-primary me-2"></i>
+                    添加用户
+                </h2>
+                <a href="/user" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-1"></i>
+                    返回用户管理
+                </a>
+            </div>
+
+            <div class="row">
+                <div class="col-md-8 col-lg-6">
+                    <div class="card shadow-sm">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0">
+                                <i class="fas fa-info-circle me-2"></i>
+                                用户信息
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <form id="addUserForm">
+                                <div class="mb-3">
+                                    <label for="phone" class="form-label">
+                                        <i class="fas fa-phone me-1"></i>
+                                        手机号
+                                    </label>
+                                    <input type="tel" class="form-control" id="phone" name="phone" 
+                                           placeholder="请输入手机号" required maxlength="11">
+                                    <div class="form-text">用于登录超星学习通的手机号</div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="password" class="form-label">
+                                        <i class="fas fa-lock me-1"></i>
+                                        密码
+                                    </label>
+                                    <div class="input-group">
+                                        <input type="password" class="form-control" id="password" name="password" 
+                                               placeholder="请输入密码" required>
+                                        <button class="btn btn-outline-secondary" type="button" id="togglePassword">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                    </div>
+                                    <div class="form-text">超星学习通的登录密码</div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="default_location" class="form-label">
+                                        <i class="fas fa-map-marker-alt me-1"></i>
+                                        默认签到位置
+                                    </label>
+                                    <select class="form-select" id="default_location" name="default_location_id" required>
+                                        <option value="">请选择默认签到位置</option>
+                                        <option value="default">默认位置（不推荐）</option>
+                                        {% if locations %}
+                                            {% for location in locations %}
+                                                <option value="{{ location.id }}" data-address="{{ location.address }}" 
+                                                        {% if loop.first %}selected{% endif %}>
+                                                    {{ location.name }} - {{ location.address }}
+                                                </option>
+                                            {% endfor %}
+                                        {% endif %}
+                                    </select>
+                                    <div class="form-text">选择该用户进行签到时的默认位置</div>
+                                    {% if not locations %}
+                                    <div class="alert alert-warning mt-2" role="alert">
+                                        <i class="fas fa-exclamation-triangle me-1"></i>
+                                        <strong>注意：</strong>您还没有配置任何位置信息。建议先到
+                                        <a href="/system/locations" class="alert-link">位置管理</a>
+                                        页面添加位置，然后再添加用户。
+                                    </div>
+                                    {% endif %}
+                                </div>
+
+                                <div class="mb-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="active" name="active" checked>
+                                        <label class="form-check-label" for="active">
+                                            <i class="fas fa-check-circle text-success me-1"></i>
+                                            立即激活用户
+                                        </label>
+                                        <div class="form-text">激活后用户将参与自动签到</div>
+                                    </div>
+                                </div>
+
+                                <div class="d-grid gap-2">
+                                    <button type="submit" class="btn btn-primary" id="submitBtn">
+                                        <i class="fas fa-plus me-1"></i>
+                                        添加用户
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-4 col-lg-6">
+                    <div class="card shadow-sm">
+                        <div class="card-header bg-info text-white">
+                            <h5 class="mb-0">
+                                <i class="fas fa-question-circle me-2"></i>
+                                使用说明
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="alert alert-info" role="alert">
+                                <h6 class="alert-heading">
+                                    <i class="fas fa-lightbulb me-1"></i>
+                                    添加用户须知
+                                </h6>
+                                <hr>
+                                <ul class="mb-0">
+                                    <li>用户名将由系统自动获取，无需手动输入</li>
+                                    <li><strong>系统会自动选择第一个配置的位置</strong>作为默认签到位置</li>
+                                    <li>建议选择已配置的具体位置，避免使用"默认位置"</li>
+                                    <li>激活的用户将参与自动签到任务</li>
+                                    <li>您可以在用户管理页面修改密码和状态</li>
+                                    <li>添加成功后页面不会跳转，方便继续添加</li>
+                                </ul>
+                            </div>
+
+                            <div class="alert alert-warning" role="alert">
+                                <h6 class="alert-heading">
+                                    <i class="fas fa-exclamation-triangle me-1"></i>
+                                    安全提醒
+                                </h6>
+                                <hr>
+                                <p class="mb-0">
+                                    用户密码将被安全存储，仅用于自动签到功能。
+                                    请确保您有权限使用这些账户信息。
+                                </p>
+                            </div>
+
+                            <div class="progress mb-3" style="height: 8px;">
+                                <div class="progress-bar" role="progressbar" style="width: 0%" 
+                                     aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                            </div>
+                            <small class="text-muted">添加进度</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- Toast 容器 -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
+    <div id="toast-container"></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // 密码显示/隐藏切换
+    $('#togglePassword').click(function() {
+        const password = $('#password');
+        const type = password.attr('type') === 'password' ? 'text' : 'password';
+        password.attr('type', type);
+        $(this).find('i').toggleClass('fa-eye fa-eye-slash');
+    });
+
+    // 表单验证和提交
+    $('#addUserForm').submit(function(e) {
+        e.preventDefault();
+        
+        const phone = $('#phone').val().trim();
+        const password = $('#password').val().trim();
+        const active = $('#active').is(':checked');
+        const default_location_id = $('#default_location').val();
+        
+        // 验证手机号格式
+        if (!/^1[3-9]\d{9}$/.test(phone)) {
+            showToast('请输入正确的手机号格式', 'warning');
+            return;
+        }
+        
+        if (password.length < 1) {
+            showToast('密码不能为空', 'warning');
+            return;
+        }
+        
+        // 验证位置选择
+        if (!default_location_id) {
+            showToast('请选择默认签到位置', 'warning');
+            return;
+        }
+        
+        // 检查是否选择了默认位置（不推荐）
+        if (default_location_id === 'default') {
+            if (!confirm('您选择了"默认位置"，这是一个不推荐的操作。\n\n默认位置可能导致签到失败或位置不准确。\n建议您先在位置管理中添加具体的位置信息。\n\n是否确认继续添加用户？')) {
+                return;
+            }
+        }
+        
+        // 禁用提交按钮防止重复提交
+        $('#submitBtn').prop('disabled', true);
+        
+        // 更新进度条
+        updateProgress(20);
+        
+        // 提交数据
+        $.ajax({
+            url: '/user/api/add',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                phone: phone,
+                password: password,
+                active: active,
+                default_location_id: default_location_id
+            }),
+            success: function(response) {
+                updateProgress(100);
+                
+                if (response.success) {
+                    showToast('用户添加成功！', 'success');
+                    
+                    // 清空表单，方便继续添加
+                    $('#addUserForm')[0].reset();
+                    $('#phone').focus();
+                } else {
+                    showToast('添加失败: ' + response.message, 'error');
+                }
+                
+                // 恢复提交按钮
+                $('#submitBtn').prop('disabled', false);
+            },
+            error: function(xhr, status, error) {
+                updateProgress(0);
+                $('#submitBtn').prop('disabled', false);
+                
+                let message = '添加用户失败';
+                if (xhr.responseJSON && xhr.responseJSON.message) {
+                    message = xhr.responseJSON.message;
+                }
+                showToast(message, 'error');
+            },
+            complete: function() {
+                // 确保提交按钮状态正确
+                $('#submitBtn').prop('disabled', false);
+            }
+        });
+    });
+    
+    // 手机号输入限制
+    $('#phone').on('input', function() {
+        this.value = this.value.replace(/[^\d]/g, '');
+        if (this.value.length > 11) {
+            this.value = this.value.slice(0, 11);
+        }
+    });
+    
+    // 页面加载时检查是否有预选的位置
+    setTimeout(function() {
+        const selectedValue = $('#default_location').val();
+        if (selectedValue && selectedValue !== '') {
+            $('#default_location').trigger('change');
+        }
+    }, 100);
+    
+    // 位置选择变化时的提示
+    $('#default_location').on('change', function() {
+        const selectedValue = $(this).val();
+        const selectedText = $(this).find('option:selected').text();
+        
+        // 移除之前的警告
+        $('.location-warning').remove();
+        
+        if (selectedValue === 'default') {
+            // 添加警告提示
+            $(this).after(`
+                <div class="location-warning alert alert-warning mt-2" role="alert">
+                    <i class="fas fa-exclamation-triangle me-1"></i>
+                    <strong>警告：</strong>您选择了默认位置，这可能导致签到失败或位置不准确。
+                    建议先配置具体的位置信息。
+                </div>
+            `);
+        } else if (selectedValue && selectedValue !== '') {
+            // 添加成功提示
+            $(this).after(`
+                <div class="location-warning alert alert-success mt-2" role="alert">
+                    <i class="fas fa-check-circle me-1"></i>
+                    <strong>已选择：</strong>${selectedText}
+                </div>
+            `);
+        }
+    });
+});
+
+function updateProgress(percent) {
+    $('.progress-bar').css('width', percent + '%').attr('aria-valuenow', percent);
+}
+
+function showToast(message, type) {
+    const bgClass = type === 'success' ? 'bg-success' : type === 'warning' ? 'bg-warning' : 'bg-danger';
+    
+    const toast = $(`
+        <div class="toast align-items-center text-white ${bgClass} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body">
+                    <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'warning' ? 'exclamation-triangle' : 'times-circle'} me-2"></i>
+                    ${message}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        </div>
+    `);
+    
+    $('#toast-container').append(toast);
+    const bsToast = new bootstrap.Toast(toast[0]);
+    bsToast.show();
+    
+    // 自动移除DOM元素
+    toast.on('hidden.bs.toast', function() {
+        $(this).remove();
+    });
+}
+</script>
+{% endblock %} 

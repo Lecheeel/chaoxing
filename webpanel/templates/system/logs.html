@@ -1,0 +1,442 @@
+{% extends "base.html" %}
+
+{% block title %}日志管理 - 超星学习通自动签到系统{% endblock %}
+
+{% block extra_css %}
+<style>
+.log-card {
+    transition: all 0.3s ease;
+}
+.log-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+.log-content {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
+    font-family: 'Courier New', monospace;
+    font-size: 0.875rem;
+    max-height: 400px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+.log-file-info {
+    font-size: 0.875rem;
+}
+.file-size {
+    color: #6c757d;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">
+        <i class="fas fa-file-alt me-2 text-primary"></i>
+        日志管理
+    </h1>
+    <div class="btn-group" role="group">
+        <button type="button" class="btn btn-outline-primary" onclick="refreshLogs()">
+            <i class="fas fa-sync-alt me-1"></i>刷新
+        </button>
+        <button type="button" class="btn btn-warning" onclick="clearAllLogs()">
+            <i class="fas fa-broom me-1"></i>清空所有日志
+        </button>
+    </div>
+</div>
+
+<!-- 日志文件列表 -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-0">
+                <h5 class="mb-0">
+                    <i class="fas fa-list me-2"></i>日志文件列表
+                </h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th width="30%">文件名</th>
+                                <th width="15%">大小</th>
+                                <th width="20%">修改时间</th>
+                                <th width="35%">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="log-files-table-body">
+                            <tr>
+                                <td colspan="4" class="text-center py-4">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">加载中...</span>
+                                    </div>
+                                    <div class="mt-2">正在加载日志文件列表...</div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 日志内容查看区域 -->
+<div class="row">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-0">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-eye me-2"></i>日志内容
+                    </h5>
+                    <div class="d-flex align-items-center">
+                        <label for="log-lines" class="form-label me-2 mb-0">显示行数:</label>
+                        <select class="form-select form-select-sm" id="log-lines" style="width: auto;" onchange="loadLogContent()">
+                            <option value="50">50行</option>
+                            <option value="100" selected>100行</option>
+                            <option value="200">200行</option>
+                            <option value="500">500行</option>
+                            <option value="1000">1000行</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div id="log-content" class="log-content p-3">
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-file-alt fa-2x mb-2"></i>
+                        <div>请选择一个日志文件查看内容</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 删除确认模态框 -->
+<div class="modal fade" id="deleteLogModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle me-2 text-warning"></i>
+                    确认删除日志文件
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>确定要删除日志文件 <strong id="delete-log-name"></strong> 吗？</p>
+                <p class="text-muted small">此操作不可撤销，删除后日志文件将永久丢失。</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-danger" onclick="confirmDeleteLog()">
+                    <i class="fas fa-trash me-1"></i>确认删除
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 清空所有日志确认模态框 -->
+<div class="modal fade" id="clearAllLogsModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle me-2 text-warning"></i>
+                    确认清空所有日志
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>确定要清空所有日志文件吗？</p>
+                <p class="text-muted small">此操作将清空所有日志文件的内容，但不会删除文件本身。此操作不可撤销。</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-warning" onclick="confirmClearAllLogs()">
+                    <i class="fas fa-broom me-1"></i>确认清空
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentLogFile = null;
+
+// 页面加载时初始化
+$(document).ready(function() {
+    loadLogFiles();
+});
+
+// 加载日志文件列表
+function loadLogFiles() {
+    $.get('/system/api/logs/list')
+        .done(function(response) {
+            if (response.success) {
+                displayLogFiles(response.data);
+            } else {
+                showError('获取日志文件列表失败: ' + response.message);
+            }
+        })
+        .fail(function() {
+            $('#log-files-table-body').html(`
+                <tr>
+                    <td colspan="4" class="text-center py-4 text-muted">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        加载日志文件列表失败
+                    </td>
+                </tr>
+            `);
+        });
+}
+
+// 显示日志文件列表
+function displayLogFiles(logFiles) {
+    const tbody = $('#log-files-table-body');
+    
+    if (!logFiles || logFiles.length === 0) {
+        tbody.html(`
+            <tr>
+                <td colspan="4" class="text-center py-4 text-muted">
+                    <i class="fas fa-inbox me-2"></i>
+                    暂无日志文件
+                </td>
+            </tr>
+        `);
+        return;
+    }
+    
+    let html = '';
+    logFiles.forEach(logFile => {
+        const sizeText = formatFileSize(logFile.size);
+        const modifiedTime = logFile.modified;
+        
+        html += `
+            <tr>
+                <td>
+                    <div class="fw-bold">${logFile.name}</div>
+                </td>
+                <td>
+                    <span class="file-size">${sizeText}</span>
+                </td>
+                <td>
+                    <small class="text-muted">${modifiedTime}</small>
+                </td>
+                <td>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-primary" onclick="viewLog('${logFile.name}')" title="查看">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        <button class="btn btn-outline-danger" onclick="deleteLog('${logFile.name}')" title="删除">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    });
+    
+    tbody.html(html);
+}
+
+// 格式化文件大小
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+// 查看日志内容
+function viewLog(logName) {
+    currentLogFile = logName;
+    loadLogContent();
+}
+
+// 加载日志内容
+function loadLogContent() {
+    if (!currentLogFile) {
+        $('#log-content').html(`
+            <div class="text-center text-muted py-4">
+                <i class="fas fa-file-alt fa-2x mb-2"></i>
+                <div>请选择一个日志文件查看内容</div>
+            </div>
+        `);
+        return;
+    }
+    
+    const lines = $('#log-lines').val();
+    
+    $('#log-content').html(`
+        <div class="text-center py-4">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">加载中...</span>
+            </div>
+            <div class="mt-2">正在加载日志内容...</div>
+        </div>
+    `);
+    
+    $.get(`/system/api/logs/${currentLogFile}`, { lines: lines })
+        .done(function(response) {
+            if (response.success) {
+                const content = response.data.join('\n');
+                $('#log-content').text(content);
+            } else {
+                $('#log-content').html(`
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        加载日志内容失败: ${response.message}
+                    </div>
+                `);
+            }
+        })
+        .fail(function() {
+            $('#log-content').html(`
+                <div class="text-center text-muted py-4">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    加载日志内容失败
+                </div>
+            `);
+        });
+}
+
+// 删除日志文件
+function deleteLog(logName) {
+    $('#delete-log-name').text(logName);
+    $('#deleteLogModal').modal('show');
+}
+
+// 确认删除日志文件
+function confirmDeleteLog() {
+    const logName = $('#delete-log-name').text();
+    
+    $.ajax({
+        url: `/system/api/logs/${logName}`,
+        method: 'DELETE',
+        success: function(response) {
+            if (response.success) {
+                showSuccess(response.message);
+                $('#deleteLogModal').modal('hide');
+                loadLogFiles();
+                
+                // 如果删除的是当前查看的日志，清空内容区域
+                if (currentLogFile === logName) {
+                    currentLogFile = null;
+                    $('#log-content').html(`
+                        <div class="text-center text-muted py-4">
+                            <i class="fas fa-file-alt fa-2x mb-2"></i>
+                            <div>请选择一个日志文件查看内容</div>
+                        </div>
+                    `);
+                }
+            } else {
+                showError('删除日志文件失败: ' + response.message);
+            }
+        },
+        error: function() {
+            showError('删除日志文件失败');
+        }
+    });
+}
+
+// 清空所有日志
+function clearAllLogs() {
+    $('#clearAllLogsModal').modal('show');
+}
+
+// 确认清空所有日志
+function confirmClearAllLogs() {
+    $.post('/system/api/logs/clear')
+        .done(function(response) {
+            if (response.success) {
+                showSuccess(response.message);
+                $('#clearAllLogsModal').modal('hide');
+                loadLogFiles();
+                
+                // 清空当前查看的日志内容
+                currentLogFile = null;
+                $('#log-content').html(`
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-file-alt fa-2x mb-2"></i>
+                        <div>请选择一个日志文件查看内容</div>
+                    </div>
+                `);
+            } else {
+                showError('清空日志文件失败: ' + response.message);
+            }
+        })
+        .fail(function() {
+            showError('清空日志文件失败');
+        });
+}
+
+// 刷新日志列表
+function refreshLogs() {
+    loadLogFiles();
+    if (currentLogFile) {
+        loadLogContent();
+    }
+}
+
+// 消息提示函数
+function showSuccess(message) {
+    // 创建Bootstrap Toast提示
+    const toastHtml = `
+        <div class="toast align-items-center text-white bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body">
+                    <i class="fas fa-check-circle me-2"></i>${message}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        </div>
+    `;
+    
+    // 添加到页面
+    if (!$('#toast-container').length) {
+        $('body').append('<div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>');
+    }
+    
+    $('#toast-container').append(toastHtml);
+    
+    // 显示Toast
+    const toast = new bootstrap.Toast($('#toast-container .toast').last()[0]);
+    toast.show();
+}
+
+function showError(message) {
+    // 创建Bootstrap Toast提示
+    const toastHtml = `
+        <div class="toast align-items-center text-white bg-danger border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body">
+                    <i class="fas fa-exclamation-circle me-2"></i>${message}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        </div>
+    `;
+    
+    // 添加到页面
+    if (!$('#toast-container').length) {
+        $('body').append('<div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>');
+    }
+    
+    $('#toast-container').append(toastHtml);
+    
+    // 显示Toast
+    const toast = new bootstrap.Toast($('#toast-container .toast').last()[0]);
+    toast.show();
+}
+</script>
+{% endblock %}

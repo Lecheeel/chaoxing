@@ -17,7 +17,7 @@ from logging.handlers import RotatingFileHandler
 
 # 配置
 APP_NAME = "超星学习通自动签到系统"
-MAIN_SCRIPT = "app.py"  # 主应用脚本
+MAIN_SCRIPT = "webpanel/app.py"  # 主应用脚本
 CHECK_INTERVAL = 10  # 检查间隔(秒)
 MAX_RESTART_COUNT = 5  # 最大重启次数(每天)
 LOG_FILE = "logs/daemon.log"  # 守护进程日志
@@ -122,8 +122,21 @@ def start_app(port=5000):
     logger.info(f"正在启动 {APP_NAME}...")
     
     try:
-        # 使用subprocess启动应用
-        cmd = [sys.executable, MAIN_SCRIPT, str(port)]
+        # 构建启动命令 - 直接启动Web应用
+        cmd = [
+            sys.executable, 
+            "-c",
+            f"""
+import sys
+import os
+sys.path.insert(0, os.getcwd())
+from webpanel.app import create_app
+
+app = create_app()
+print('守护模式 - Web应用已启动，端口: {port}')
+app.run(host='0.0.0.0', port={port}, debug=False, use_reloader=False)
+"""
+        ]
         
         # 根据不同平台设置启动参数
         popen_kwargs = {
@@ -274,6 +287,24 @@ def monitor_app(port=5000):
             logger.error(f"监控循环出错: {e}")
             time.sleep(CHECK_INTERVAL)  # 发生错误时也等待
 
+def check_dependencies():
+    """检查基本依赖"""
+    deps = ['flask', 'psutil']
+    missing = []
+    
+    for dep in deps:
+        try:
+            __import__(dep)
+        except ImportError:
+            missing.append(dep)
+    
+    if missing:
+        logger.error(f"缺少依赖: {', '.join(missing)}")
+        logger.error("请运行: pip install flask psutil")
+        return False
+    
+    return True
+
 def main():
     """主函数，解析命令行参数并启动守护进程"""
     parser = argparse.ArgumentParser(description=f'{APP_NAME} 守护进程')
@@ -282,11 +313,25 @@ def main():
     
     args = parser.parse_args()
     
+    # 检查依赖
+    if not check_dependencies():
+        sys.exit(1)
+    
     # 注册信号处理器
     signal.signal(signal.SIGINT, signal_handler)   # Ctrl+C
     signal.signal(signal.SIGTERM, signal_handler)  # 终止信号
     
     # 输出启动信息
+    print("=" * 60)
+    print(f"🚀 {APP_NAME} - 守护进程模式")
+    print("=" * 60)
+    print(f"📟 操作系统: {platform.system()} {platform.release()}")
+    print(f"🌐 监听端口: {args.port}")
+    print(f"🔧 进程ID: {os.getpid()}")
+    print(f"📱 访问地址: http://127.0.0.1:{args.port}")
+    print(f"📁 日志文件: {LOG_FILE}")
+    print("=" * 60)
+    
     logger.info("=" * 50)
     logger.info(f"{APP_NAME} 守护进程启动")
     logger.info(f"操作系统: {platform.system()} {platform.release()}")
@@ -299,21 +344,29 @@ def main():
             # 分离前记录PID
             pid = os.fork()
             if pid > 0:
+                print(f"✅ 守护进程已后台运行，PID: {pid}")
                 logger.info(f"守护进程已分离，PID: {pid}")
                 sys.exit(0)
         except OSError as e:
             logger.error(f"无法分离进程: {e}")
+            print(f"❌ 无法后台运行: {e}")
             sys.exit(1)
     elif args.detach and IS_WINDOWS:
+        print("⚠️ Windows系统不支持后台分离，将以前台模式运行")
         logger.warning("Windows系统不支持后台分离运行模式，将以前台模式运行")
+    
+    print("🔄 守护进程监控已启动，使用Ctrl+C停止")
+    print("=" * 60)
     
     # 启动监控
     try:
         monitor_app(args.port)
     except KeyboardInterrupt:
         logger.info("收到键盘中断，退出守护进程")
+        print("\n👋 守护进程已停止")
     except Exception as e:
         logger.error(f"守护进程异常: {e}")
+        print(f"❌ 守护进程异常: {e}")
     finally:
         # 确保应用进程被终止
         if app_process and app_process.poll() is None:
