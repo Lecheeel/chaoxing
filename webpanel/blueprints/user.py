@@ -491,7 +491,7 @@ def get_user_stats():
 
 @user_bp.route('/api/list')
 def get_user_list():
-    """获取用户列表（支持分页和搜索）"""
+    """获取用户列表（支持搜索，不分页）"""
     try:
         print("=== 用户列表API被调用 ===")
         users = safe_get_users()
@@ -499,11 +499,9 @@ def get_user_list():
         print(f"用户数量: {len(users)}")
         
         # 获取查询参数
-        page = int(request.args.get('page', 1))
-        per_page = int(request.args.get('per_page', 10))
         search = request.args.get('search', '').strip()
         status = request.args.get('status', '').strip()
-        print(f"查询参数: page={page}, per_page={per_page}, search='{search}', status='{status}'")
+        print(f"查询参数: search='{search}', status='{status}'")
         
         # 过滤用户
         filtered_users = []
@@ -532,29 +530,13 @@ def get_user_list():
             print(f"格式化用户数据: {formatted_user}")  # 调试信息
             filtered_users.append(formatted_user)
         
-        # 分页计算
-        total_users = len(filtered_users)
-        total_pages = (total_users + per_page - 1) // per_page if total_users > 0 else 1
-        start_idx = (page - 1) * per_page
-        end_idx = start_idx + per_page
-        
-        paginated_users = filtered_users[start_idx:end_idx]
-        
-        pagination_info = {
-            'current_page': page,
-            'total_pages': total_pages,
-            'total_items': total_users,
-            'per_page': per_page
-        }
-        
         result = {
             'success': True,
             'data': {
-                'users': paginated_users,
-                'pagination': pagination_info
+                'users': filtered_users
             }
         }
-        print(f"返回结果: {result}")
+        print(f"返回结果: 共{len(filtered_users)}个用户")
         return jsonify(result)
     except Exception as e:
         return jsonify({
